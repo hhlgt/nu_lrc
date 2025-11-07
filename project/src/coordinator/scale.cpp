@@ -26,6 +26,44 @@ inline bool isSubset(const std::unordered_set<int>& set1,
 }
 
 namespace ECProject {
+  void Coordinator::compute_hotness(ScaleResp& resp)
+  {
+    float old_hotness = 0;
+    float new_hotness = 0;
+    float old_so = 0;
+    int cnt = 0;
+    for (auto& kv : stripe_table_) {
+      Stripe& stripe = kv.second;
+      auto lrc = dynamic_cast<LocallyRepairableCode*>(stripe.ec);
+      float old_avg = 0;
+      float new_avg = 0;
+      for (auto key : stripe.objects)
+      {
+        ObjectInfo& obj = commited_object_table_[key];
+        int old_access_rate = obj.access_rate;
+        // update access rate
+        obj.access_rate = obj.access_cnt;
+        obj.access_cnt = 0;
+        // update hotness
+        old_avg += old_access_rate * (obj.value_len / ec_schema_.block_size);
+        new_avg += obj.access_rate * (obj.value_len / ec_schema_.block_size);
+      }
+      old_avg /= lrc->k;
+      new_avg /= lrc->k;
+      old_hotness += old_avg;
+      new_hotness += new_avg;
+      old_so += stripe.ec->storage_overhead;
+      ++cnt;
+    }
+    old_hotness /= cnt;
+    new_hotness /= cnt;
+    old_so /= cnt;
+    resp.old_hotness = old_hotness;
+    resp.new_hotness = new_hotness;
+    resp.old_storage_overhead = old_so;
+    resp.new_storage_overhead = old_so;
+  }
+
   std::vector<unsigned int> Coordinator::stripes_for_scaling(
           float storage_overhead_upper, float gamma, ScaleResp& resp)
   {
@@ -45,6 +83,7 @@ namespace ECProject {
       {
         ObjectInfo& obj = commited_object_table_[key];
         int old_access_rate = obj.access_rate;
+        // update access rate
         obj.access_rate = obj.access_cnt;
         obj.access_cnt = 0;
         if ((std::fabs((float)obj.access_rate / (float)obj.access_cnt) - 1.0) > gamma) {
@@ -78,7 +117,7 @@ namespace ECProject {
     resp.new_storage_overhead = new_so;
     return stripe_ids;
   }
-  void Coordinator::do_scaling(const std::vector<unsigned int>& stripe_ids, ScaleResp& resp)
+  void Coordinator::do_scaling(const std::vector<unsigned int>& stripe_ids, ScaleResp& resp, bool optimized_recal)
   {
     struct timeval start_time, end_time;
     struct timeval m_start_time, m_end_time;
@@ -148,9 +187,8 @@ namespace ECProject {
       }
 
       // generate recalculation plans
-      bool if_optimized = true;
       std::vector<std::vector<int>> recalculation_plans;
-      if (if_optimized) {
+      if (optimized_recal) {
         generate_recalculation_plans(recalculation_plans, old_ec, new_ec);
       } else {
         lrc->grouping_information(recalculation_plans);
@@ -184,11 +222,11 @@ namespace ECProject {
       std::vector<unsigned int> new_placement_info;
       if (stripe.ec->placement_rule == PlacementRule::FLAT) {
         new_placement_info = new_placement_for_partitions_flat(
-            stripe.stripe_id, old_placement_info, new2old);
+            new_ec, old_placement_info, new2old);
       } else {
         auto new_partition_plan = new_ec->partition_plan;
         new_placement_info = new_placement_for_partitions(
-            false, stripe.stripe_id, old_partition_plan,
+            false, new_ec, old_partition_plan,
             new_partition_plan, old_placement_info, new2old);
       }
       
@@ -473,6 +511,19 @@ namespace ECProject {
     resp.scaling_time = scaling_time;
     resp.cross_cluster_transfers = cross_cluster_transfers;
     resp.io_cnt = io_cnt;
+    resp.ifscaled = true;
+    if (IF_DEBUG) {
+      for (auto& kv : stripe_table_) {
+        std::string msg = "Stripe " + std::to_string(kv.first) + " : ";
+        msg += kv.second.ec->self_information() + "\n";
+        for (auto& key : kv.second.objects) {
+          ObjectInfo& obj = commited_object_table_[key];
+          msg += key + "[" + std::to_string(obj.value_len) + "," + std::to_string(obj.access_rate) + "] ";
+        }
+        msg += "\n";
+        write_logs(Logger::LogLevel::INFO, msg);
+      }
+    }
   }
 
   void Coordinator::generate_recalculation_plans(
@@ -643,15 +694,14 @@ namespace ECProject {
   }
 
   std::vector<unsigned int> Coordinator::new_placement_for_partitions_flat(
-            unsigned int stripe_id,
+            ErasureCode* new_ec,
             const std::vector<unsigned int>& old_placement_info,
             const std::unordered_map<int, int>& new2old)
   {
-    Stripe &stripe = stripe_table_[stripe_id];
-    int stripe_wide = stripe.ec->k + stripe.ec->m;
+    int stripe_wide = new_ec->k + new_ec->m;
     unsigned int unreached_node_id = num_of_clusters_ * num_of_nodes_per_cluster_ + 1;
     std::vector<unsigned int> new_placement_info(stripe_wide, unreached_node_id); 
-    auto lrc = dynamic_cast<LocallyRepairableCode*>(stripe.ec);
+    auto lrc = dynamic_cast<LocallyRepairableCode*>(new_ec);
 
     std::vector<unsigned int> free_clusters;
     for (unsigned int i = 0; i < num_of_clusters_; i++) {
@@ -699,17 +749,16 @@ namespace ECProject {
 
   std::vector<unsigned int> Coordinator::new_placement_for_partitions(
             bool if_common,
-            unsigned int stripe_id,
+            ErasureCode* new_ec,
             const std::vector<std::vector<int>>& old_pars,
             const std::vector<std::vector<int>>& new_pars,
             const std::vector<unsigned int>& old_placement_info,
             const std::unordered_map<int, int>& new2old)
   {
-    Stripe& stripe = stripe_table_[stripe_id];
-    int stripe_wide = stripe.ec->k + stripe.ec->m;
+    int stripe_wide = new_ec->k + new_ec->m;
     unsigned int unreached_node_id = num_of_clusters_ * num_of_nodes_per_cluster_ + 1;
     std::vector<unsigned int> new_placement_info(stripe_wide, unreached_node_id);
-    auto lrc = dynamic_cast<LocallyRepairableCode*>(stripe.ec);
+    auto lrc = dynamic_cast<LocallyRepairableCode*>(new_ec);
 
     std::vector<unsigned int> old_par2cid;
     for (const auto& par : old_pars) {

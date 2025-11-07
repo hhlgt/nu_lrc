@@ -16,11 +16,6 @@ int main(int argc, char **argv)
   std::string xml_path = std::string(buff) +
       cwf.substr(1, cwf.rfind('/') - 1) + "/../clusterinfo.xml";
   Coordinator coordinator("0.0.0.0", COORDINATOR_PORT, xml_path);
-  if (argc == 2) {
-    std::string config_file = std::string(buff) +
-        cwf.substr(1, cwf.rfind('/') - 1) + "/../" + std::string(argv[1]);
-    coordinator.init_ec_schema(config_file);
-  }
   coordinator.run();
   return 0;
 }

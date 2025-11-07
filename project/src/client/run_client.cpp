@@ -527,7 +527,9 @@ void parse_tracefile(std::string tracefile_path, int block_size,
 void test_single_block_repair_lrc_periodically(Client &client,
     const std::vector<std::vector<size_t>> &ms_object_sizes,
     const std::vector<std::vector<unsigned int>> &ms_object_accessrates,
-    size_t block_size)
+    const std::vector<float> ms_storge_overhead,
+    const std::vector<int> ms_g,
+    size_t block_size, bool if_node_repair = false)
 {
   auto stripe_ids = client.list_stripes();
   int stripe_num = stripe_ids.size();
@@ -537,7 +539,7 @@ void test_single_block_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 10;
+  int run_time = 2;
   int tot_cnt = 0;
   std::cout << "Single-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
@@ -551,9 +553,17 @@ void test_single_block_repair_lrc_periodically(Client &client,
     int cnt = 0;
     for (int j = 0; j < stripe_num; j++) {
       int k = 0;
+      int ak = 0;
+      int idx = 0;
       for (auto& size : ms_object_sizes[j]) {
         k += size / block_size;
+        ak += (size / block_size) * ms_object_accessrates[j][idx++];
       }
+      int a_avg = ak / k;
+      int l = int(round(ms_storge_overhead[j] * k)) - k - ms_g[j];
+      int r = (k + ms_g[j] + l - 1) / l;
+      l = (k + ms_g[j] + r - 1) / r;
+
       int n_files = int(ms_object_sizes[j].size());
       std::vector<size_t> object_sizes = ms_object_sizes[j];
       std::vector<unsigned int> object_accessrates = ms_object_accessrates[j];
@@ -562,24 +572,58 @@ void test_single_block_repair_lrc_periodically(Client &client,
       {
         int obj_len = object_sizes[ii] / block_size;
         upperbound += obj_len;
-        for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
-          int ran_fblock_id = random_index(k);  // each data block has the same probability of being failed
-          if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
-            std::vector<unsigned int> failures;
-            failures.push_back((unsigned int)ran_fblock_id);
-            auto resp = client.blocks_repair(failures, stripe_ids[j]);
-            if (resp.success) {
-              temp_repair += resp.repair_time;
-              temp_decoding += resp.decoding_time;
-              temp_cross_cluster += resp.cross_cluster_time;
-              temp_meta += resp.meta_time;
-              temp_cc_transfers += resp.cross_cluster_transfers;
-              temp_io_cnt += resp.io_cnt;
-              cnt++;
-            }
+        // for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
+        //   int ran_fblock_id = random_index(k);  // each data block has the same probability of being failed
+        //   if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
+        //     std::vector<unsigned int> failures;
+        //     failures.push_back((unsigned int)ran_fblock_id);
+        //     auto resp = client.blocks_repair(failures, stripe_ids[j]);
+        //     if (resp.success) {
+        //       temp_repair += resp.repair_time;
+        //       temp_decoding += resp.decoding_time;
+        //       temp_cross_cluster += resp.cross_cluster_time;
+        //       temp_meta += resp.meta_time;
+        //       temp_cc_transfers += resp.cross_cluster_transfers;
+        //       temp_io_cnt += resp.io_cnt;
+        //       cnt++;
+        //     }
+        //   }
+        // }
+        
+        int ar = object_accessrates[ii];
+        for(int jj = lowerbound; jj < upperbound; jj++)
+        {
+          std::vector<unsigned int> failures;
+          failures.push_back(jj);
+          auto resp = client.blocks_repair(failures, stripe_ids[j]);
+          if (resp.success) {
+            temp_repair += resp.repair_time * ar;
+            temp_decoding += resp.decoding_time * ar;
+            temp_cross_cluster += resp.cross_cluster_time * ar;
+            temp_meta += resp.meta_time * ar;
+            temp_cc_transfers += resp.cross_cluster_transfers * ar;
+            temp_io_cnt += resp.io_cnt * ar;
+            cnt += ar;
           }
         }
+
         lowerbound += obj_len;
+      }
+      if (if_node_repair) {
+        for (auto ii = k; ii < k + ms_g[j] + l; ii++) {
+          std::vector<unsigned int> failures;
+          failures.push_back((unsigned int)ii);
+          auto resp = client.blocks_repair(failures, stripe_ids[j]);
+          if (resp.success) {
+            temp_repair += resp.repair_time * a_avg;
+            temp_decoding += resp.decoding_time * a_avg;
+            temp_cross_cluster += resp.cross_cluster_time * a_avg;
+            temp_meta += resp.meta_time * a_avg;
+            temp_cc_transfers += resp.cross_cluster_transfers * a_avg;
+            temp_io_cnt += resp.io_cnt * a_avg;
+            cnt += a_avg;
+          }
+        }
       }
     }
     repair_times.push_back(temp_repair);
@@ -621,6 +665,8 @@ void test_single_block_repair_lrc_periodically(Client &client,
 void test_multi_blocks_repair_lrc_periodically(Client &client,
     const std::vector<std::vector<size_t>> &ms_object_sizes,
     const std::vector<std::vector<unsigned int>> &ms_object_accessrates,
+    const std::vector<float> ms_storge_overhead,
+    const std::vector<int> ms_g,
     size_t block_size)
 {
   auto stripe_ids = client.list_stripes();
@@ -631,7 +677,7 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 10;
+  int run_time = 1;
   int tot_cnt = 0;
   std::cout << "Two-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
@@ -645,45 +691,82 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
     int cnt = 0;
     for (int j = 0; j < stripe_num; j++) {
       int k = 0;
+      int ak = 0;
+      int idx = 0;
+      int bid = 0;
+      std::unordered_map<int, int> b2f;
       for (auto& size : ms_object_sizes[j]) {
-        k += size / block_size;
+        int ki = size / block_size;
+        k += ki;
+        ak += ki * ms_object_accessrates[j][idx];
+        for (int ii = 0; ii < ki; ii++) {
+          b2f[bid++] = idx;
+        }
+        ++idx;
       }
-      int n_files = int(ms_object_sizes[j].size());
-      std::vector<size_t> object_sizes = ms_object_sizes[j];
-      std::vector<unsigned int> object_accessrates = ms_object_accessrates[j];
-      int lowerbound = 0, upperbound = 0;
-      for(int ii = 0; ii < n_files; ii++)
-      {
-        int file_len = object_sizes[ii] / block_size;
-        upperbound += file_len;
-        for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
-          std::vector<int> ran_fblock_ids;
-          random_n_num(0, k - 1, 2, ran_fblock_ids);
-          bool flag = false;
-          for(int ran_fblock_id : ran_fblock_ids) { // each data block has the same probability of being failed
-            if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
-              flag = true;
-              break;
-            }
-          }
-          if(flag) {// a block in requested file failed
+      int a_avg = ak / k;
+      int l = int(round(ms_storge_overhead[j] * k)) - k - ms_g[j];
+      int r = (k + ms_g[j] + l - 1) / l;
+      l = (k + ms_g[j] + r - 1) / r;
+
+      // int n_files = int(ms_object_sizes[j].size());
+      // std::vector<size_t> object_sizes = ms_object_sizes[j];
+      // std::vector<unsigned int> object_accessrates = ms_object_accessrates[j];
+      // int lowerbound = 0, upperbound = 0;
+      // for(int ii = 0; ii < n_files; ii++)
+      // {
+      //   int file_len = object_sizes[ii] / block_size;
+      //   upperbound += file_len;
+      //   for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
+      //     std::vector<int> ran_fblock_ids;
+      //     random_n_num(0, k - 1, 2, ran_fblock_ids);
+      //     bool flag = false;
+      //     for(int ran_fblock_id : ran_fblock_ids) { // each data block has the same probability of being failed
+      //       if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
+      //         flag = true;
+      //         break;
+      //       }
+      //     }
+      //     if(flag) {// a block in requested file failed
+      //       std::vector<unsigned int> failures;
+      //       for (auto& id : ran_fblock_ids) {
+      //         failures.push_back((unsigned int)id); 
+      //       }
+      //       auto resp = client.blocks_repair(failures, stripe_ids[j]);
+      //       if (resp.success) {
+      //         temp_repair += resp.repair_time;
+      //         temp_decoding += resp.decoding_time;
+      //         temp_cross_cluster += resp.cross_cluster_time;
+      //         temp_meta += resp.meta_time;
+      //         temp_cc_transfers += resp.cross_cluster_transfers;
+      //         temp_io_cnt += resp.io_cnt;
+      //         cnt++;
+      //       }
+      //     }
+      //   }
+      //   lowerbound += file_len;
+      // }
+
+      for (int ii = 0; ii < k; ii++) {
+        for (int jj = ii + 1; jj < k; jj++) {
+          int ran_num = random_index(100);
+          if (ran_num < 20) {
             std::vector<unsigned int> failures;
-            for (auto& id : ran_fblock_ids) {
-              failures.push_back((unsigned int)id); 
-            }
+            failures.push_back((unsigned int)ii);
+            failures.push_back((unsigned int)jj);
+            int weight = (ms_object_accessrates[j][b2f[ii]] + ms_object_accessrates[j][b2f[jj]]) / 2;
             auto resp = client.blocks_repair(failures, stripe_ids[j]);
             if (resp.success) {
-              temp_repair += resp.repair_time;
-              temp_decoding += resp.decoding_time;
-              temp_cross_cluster += resp.cross_cluster_time;
-              temp_meta += resp.meta_time;
-              temp_cc_transfers += resp.cross_cluster_transfers;
-              temp_io_cnt += resp.io_cnt;
-              cnt++;
+              temp_repair += resp.repair_time * weight;
+              temp_decoding += resp.decoding_time * weight;
+              temp_cross_cluster += resp.cross_cluster_time * weight;
+              temp_meta += resp.meta_time * weight;
+              temp_cc_transfers += resp.cross_cluster_transfers * weight;
+              temp_io_cnt += resp.io_cnt * weight;
+              cnt += weight;
             }
           }
         }
-        lowerbound += file_len;
       }
     }
     repair_times.push_back(temp_repair);
@@ -722,9 +805,167 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
             << std::endl;
 }
 
+struct WorkFlows
+{
+  std::vector<std::vector<size_t>> ms_object_sizes;
+  std::vector<std::vector<std::vector<unsigned int>>> ms_object_accessrates;
+  std::vector<float> ms_storge_overhead;
+  std::vector<int> ms_g;
+};
+
+void generate_workflows(WorkFlows& workflows, size_t block_size, std::string tracefile_path,
+    const ScaleParameters& scale_paras)
+{
+  workflows.ms_object_accessrates.resize(scale_paras.test_time + 1);
+  parse_tracefile(tracefile_path, block_size, workflows.ms_storge_overhead, workflows.ms_g,
+      workflows.ms_object_sizes, workflows.ms_object_accessrates[0]);
+  for (int i = 1; i <= scale_paras.test_time; i++) {
+    workflows.ms_object_accessrates[i] = workflows.ms_object_accessrates[i - 1];
+    double change_rate = scale_paras.change_rate;
+    for (auto& object_accessrates : workflows.ms_object_accessrates[i]) {
+      for (auto& accessrate : object_accessrates) {
+        if (rand() / double(RAND_MAX) < change_rate) {
+          double randomFactor = 1.0 + ((rand() % 201 - 100) / 100.0);
+          accessrate = static_cast<unsigned int>(accessrate * randomFactor);
+          if (accessrate == 0) accessrate = 1;
+        }
+      }
+    }
+  }
+}
+
+void test_repair_performance_periodically_v2(
+    std::string path_prefix, std::string tracefile,
+    int stripe_num, ParametersInfo& paras,
+    ScaleParameters& scale_paras, int failed_num)
+{
+  std::string tracefile_path = path_prefix + "/../../tracefile/" + tracefile;
+  WorkFlows wfs;
+  generate_workflows(wfs, paras.block_size, tracefile_path, scale_paras);
+  Client client("0.0.0.0", CLIENT_PORT, "0.0.0.0", COORDINATOR_PORT);
+
+  // generate key-value pair
+  std::vector<size_t> value_lengths(stripe_num, 0);
+  std::vector<std::vector<std::string>> ms_object_keys;
+  int obj_id = 0;
+  for (int i = 0; i < stripe_num; i++) {
+    std::vector<std::string> object_keys;
+    for (auto& size : wfs.ms_object_sizes[i]) {
+      value_lengths[i] += size;
+      object_keys.emplace_back("obj" + std::to_string(obj_id++));
+    }
+    ms_object_keys.emplace_back(object_keys);
+  }
+
+  for (int t = 0; t < 3; ++t) {
+    if (t == 1) {
+      scale_paras.optimized_recal = false;
+    } else if (t == 2) {
+      paras.ec_type = ECTYPE::UNIFORM_CAUCHY_LRC;
+    } 
+    // set erasure coding parameters
+    client.set_ec_parameters(paras);
+
+    // set log level
+    client.set_log_level(paras.loglevel);
+
+    struct timeval start_time, end_time;
+
+    #ifdef IN_MEMORY
+      std::unordered_map<std::string, std::string> key_value;
+      generate_unique_random_strings_difflen(5, stripe_num, value_lengths, key_value);
+    #endif
+
+    // set
+    double set_time = 0;
+    #ifdef IN_MEMORY
+      int i = 0;
+      for (auto& kv : key_value) {
+        gettimeofday(&start_time, NULL);
+        double encoding_time = client.set(kv.second, ms_object_keys[i], wfs.ms_object_sizes[i],
+            wfs.ms_object_accessrates[0][i], wfs.ms_storge_overhead[i], wfs.ms_g[i]);
+        gettimeofday(&end_time, NULL);
+        double temp_time = end_time.tv_sec - start_time.tv_sec +
+            (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+        set_time += temp_time;
+        std::cout << "[SET] set time: " << temp_time << ", encoding time: "
+                  << encoding_time << std::endl;
+        ++i;
+      }
+      std::cout << "Total set time: " << set_time << ", average set time:"
+                << set_time / stripe_num << std::endl;
+    #else
+      for (int i = 0; i < stripe_num; i++) {
+        std::string readpath = path_prefix + "/../../data/Object";
+        double encoding_time = 0;
+        gettimeofday(&start_time, NULL);
+        if (access(readpath.c_str(), 0) == -1) {
+          std::cout << "[Client] file does not exist!" << std::endl;
+          exit(-1);
+        } else {
+          char *buf = new char[value_lengths[i] + 1];
+          std::ifstream ifs(readpath);
+          ifs.read(buf, value_lengths[i]);
+          buf[value_lengths[i]] = '\0';
+          encoding_time = client.set(std::string(buf), ms_object_keys[i], 
+              wfs.ms_object_sizes[i], wfs.ms_object_accessrates[0][i], 
+              wfs.ms_storge_overhead[i], wfs.ms_g[i]);
+          ifs.close();
+          delete buf;
+        }
+        gettimeofday(&end_time, NULL);
+        double temp_time = end_time.tv_sec - start_time.tv_sec +
+            (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+        set_time += temp_time;
+        std::cout << "[SET] set time: " << temp_time << ", encoding time: "
+                  << encoding_time << std::endl;
+      }
+      std::cout << "Total set time: " << set_time << ", average set time:"
+                << set_time / stripe_num << std::endl;
+    #endif
+
+    int test_time = scale_paras.test_time;
+    srand(time(NULL));
+
+    for (int tt = 0; tt < test_time; tt++) {
+      // test repair
+      if (failed_num == 1) {
+        test_single_block_repair_lrc_periodically(client, wfs.ms_object_sizes,
+            wfs.ms_object_accessrates[tt], wfs.ms_storge_overhead, wfs.ms_g, paras.block_size);
+      } else if (failed_num == 2) {
+        test_multi_blocks_repair_lrc_periodically(client, wfs.ms_object_sizes,
+            wfs.ms_object_accessrates[tt], wfs.ms_storge_overhead, wfs.ms_g, paras.block_size);
+      }
+
+      client.update_hotness(wfs.ms_object_accessrates[tt + 1]);
+      
+      // scale
+      auto resp = client.scale(scale_paras.storage_overhead_upper_bound,
+              scale_paras.gamma, scale_paras.optimized_recal);
+      if (resp.ifscaled) {
+        std::cout << "[SCALE] scale time: " << resp.scaling_time
+                  << ", computing time: " << resp.computing_time
+                  << ", cross-cluster time: " << resp.cross_cluster_time
+                  << ", meta time: " << resp.meta_time
+                  << ", cross-cluster-count: " << resp.cross_cluster_transfers
+                  << ", I/Os = " << resp.io_cnt
+                  << std::endl;
+      }
+      std::cout << "Last time: storage_overhead = " << resp.old_storage_overhead
+                << ", avg_hotness = " << resp.old_hotness
+                << "\nNow: storage_overhead = " << resp.new_storage_overhead
+                << ", avg_hotness = " << resp.new_hotness << std::endl;
+    }
+
+    // delete
+    client.delete_all_stripes();
+  }
+}
+
 void test_repair_performance_periodically(
     std::string path_prefix, std::string tracefile,
-    int stripe_num, const ParametersInfo& paras, int failed_num)
+    int stripe_num, const ParametersInfo& paras,
+    const ScaleParameters& scale_paras, int failed_num)
 {
   std::string tracefile_path = path_prefix + "/../../tracefile/" + tracefile;
   std::vector<std::vector<size_t>> ms_object_sizes;
@@ -738,6 +979,9 @@ void test_repair_performance_periodically(
 
   // set erasure coding parameters
   client.set_ec_parameters(paras);
+
+  // set log level
+  client.set_log_level(paras.loglevel);
 
   struct timeval start_time, end_time;
   // generate key-value pair
@@ -804,19 +1048,20 @@ void test_repair_performance_periodically(
               << set_time / stripe_num << std::endl;
   #endif
 
-  int test_time = 1;
+  int test_time = scale_paras.test_time;
+  srand(time(NULL));
 
   while (test_time--) {
     // test repair
     if (failed_num == 1) {
       test_single_block_repair_lrc_periodically(client, ms_object_sizes,
-          ms_object_accessrates, paras.block_size);
+          ms_object_accessrates, ms_storge_overhead, ms_g, paras.block_size);
     } else if (failed_num == 2) {
       test_multi_blocks_repair_lrc_periodically(client, ms_object_sizes,
-          ms_object_accessrates, paras.block_size);
+          ms_object_accessrates, ms_storge_overhead, ms_g, paras.block_size);
     }
 
-    double change_rate = 0.1;
+    double change_rate = scale_paras.change_rate;
     for (auto& object_accessrates : ms_object_accessrates) {
       for (auto& accessrate : object_accessrates) {
         if (rand() / double(RAND_MAX) < change_rate) {
@@ -847,9 +1092,8 @@ void test_repair_performance_periodically(
               << get_time / stripe_num << std::endl;
     
     // scale
-    float storage_overhead_upper = 1.5;
-    float gamma = 0.3;
-    auto resp = client.scale(storage_overhead_upper, gamma);
+    auto resp = client.scale(scale_paras.storage_overhead_upper_bound,
+            scale_paras.gamma, scale_paras.optimized_recal);
     if (resp.ifscaled) {
       std::cout << "[SCALE] scale time: " << resp.scaling_time
                 << ", computing time: " << resp.computing_time
@@ -882,14 +1126,16 @@ int main(int argc, char **argv)
   std::string path_prefix = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1);
 
   ParametersInfo paras;
-  parse_args(nullptr, paras, path_prefix + "/../" + std::string(argv[1]));
+  ScaleParameters scale_paras;
+  parse_args(nullptr, paras, scale_paras, path_prefix + "/../" + std::string(argv[1]));
   std::string tracefile = std::string(argv[2]);
   int stripe_num = std::stoi(argv[3]);
 
   int failed_num = std::stoi(argv[4]);
   my_assert(0 <= failed_num && failed_num <= 2);
   
-  test_repair_performance_periodically(path_prefix, tracefile, stripe_num, paras, failed_num);
+  // test_repair_performance_periodically(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num);
+  test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num);
 
   return 0;
 }

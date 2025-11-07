@@ -2,15 +2,16 @@
 #include <fstream>
 #include <string>
 #include <ctime>
+#include <mutex>
 
 namespace ECProject {
   class Logger {
   public:
     enum LogLevel {
+      DEBUG,
       INFO,
       WARNING,
-      ERROR,
-      DEBUG
+      ERROR
     };
 
     Logger(const std::string& filename) {
@@ -26,8 +27,15 @@ namespace ECProject {
       }
     }
 
+    void setLogLevel(LogLevel level) {
+      logLevel = level;
+    }
+
     void log(LogLevel level, const std::string& message) {
-      if (!logFile.is_open()) return;
+      std::lock_guard<std::mutex> lock(logMutex);
+      if (!logFile.is_open()) {
+        return;
+      }
 
       if (level == DEBUG) {
         logFile << message;
@@ -36,10 +44,13 @@ namespace ECProject {
         std::string timeStr = getCurrentTime();
         logFile << "[" << timeStr << "] [" << levelStr << "] " << message;
       }
+      logFile.flush();
     }
 
   private:
     std::ofstream logFile;
+    std::mutex logMutex;
+    LogLevel logLevel = LogLevel::DEBUG;
 
     std::string getLevelString(LogLevel level) {
       switch (level) {

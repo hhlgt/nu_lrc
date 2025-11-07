@@ -24,6 +24,13 @@ namespace ECProject
         rpc_coordinator_->call<&Coordinator::set_erasure_coding_parameters>(parameters));
   }
 
+  // set log level
+  void Client::set_log_level(Logger::LogLevel log_level)
+  {
+    async_simple::coro::syncAwait(
+        rpc_coordinator_->call<&Coordinator::set_log_level>(log_level));
+  }
+
   double Client::set(const std::string& value,
                      const std::vector<std::string>& object_keys,
                      const std::vector<size_t>& object_sizes,
@@ -165,13 +172,19 @@ namespace ECProject
     return response;
   }
 
-  ScaleResp Client::scale(float storage_overhead_upper, float gamma)
+  ScaleResp Client::scale(float storage_overhead_upper, float gamma, bool optimized_recal)
   {
     auto response =
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_scale>(
-                std::chrono::seconds{0}, storage_overhead_upper, gamma)).value();
+                std::chrono::seconds{0}, storage_overhead_upper, gamma, optimized_recal)).value();
     return response;
+  }
+
+  void Client::update_hotness(std::vector<std::vector<unsigned int>> ms_object_accessrates)
+  {
+    async_simple::coro::syncAwait(
+        rpc_coordinator_->call<&Coordinator::update_hotness>(ms_object_accessrates));
   }
 
   std::vector<unsigned int> Client::list_stripes()

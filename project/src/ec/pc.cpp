@@ -520,6 +520,11 @@ bool ProductCode::generate_repair_plan(const std::vector<int>& failure_idxs,
 				plan.local_or_column = true;
 				int cnt = 0;
 				std::vector<int> help_block;
+				for (int jj = k2; jj < k2 + m2; jj++) {
+					if (failed_map[jj][i]) {
+						plan.parity_idxs.push_back(rowcol2bid(jj, i));
+					}
+				}
 				for (int jj = 0; jj < k2 + m2; jj++) {
 					if (cnt == k2) {
 						break;
@@ -527,6 +532,9 @@ bool ProductCode::generate_repair_plan(const std::vector<int>& failure_idxs,
 					if (!failed_map[jj][i]) {
 						help_block.push_back(rowcol2bid(jj, i));
 						cnt++;
+						if (jj >= k2) {
+							plan.parity_idxs.push_back(rowcol2bid(jj, i));
+						}
 					}
 				}
 				if (placement_rule == FLAT) {
@@ -573,6 +581,9 @@ bool ProductCode::generate_repair_plan(const std::vector<int>& failure_idxs,
 					for (auto it = plan.help_blocks[ii].begin(); it != plan.help_blocks[ii].end(); it++) {
 						*it = rowcol2bid(i, *it);
 					}
+				}
+				for (auto it = plan.parity_idxs.begin(); it != plan.parity_idxs.end(); it++) {
+					*it = rowcol2bid(i, *it);
 				}
 
 				// update failed_map
@@ -927,6 +938,11 @@ bool HVPC::generate_repair_plan(const std::vector<int>& failure_idxs,
 				plan.local_or_column = true;
 				int cnt = 0;
 				std::vector<int> help_block;
+				for (int jj = k2; jj < k2 + m2; jj++) {
+					if (failed_map[jj][i]) {
+						plan.parity_idxs.push_back(rowcol2bid(jj, i));
+					}
+				}
 				for (int jj = 0; jj < k2 + m2; jj++) {
 					if (cnt == k2) {
 						break;
@@ -935,6 +951,9 @@ bool HVPC::generate_repair_plan(const std::vector<int>& failure_idxs,
 					if (!failed_map[jj][i]) {
 						help_block.push_back(rowcol2bid(jj, i));
 						cnt++;
+						if (jj >= k2) {
+							plan.parity_idxs.push_back(rowcol2bid(jj, i));
+						}
 					}
 				}
 				if (placement_rule == FLAT) {
@@ -981,6 +1000,9 @@ bool HVPC::generate_repair_plan(const std::vector<int>& failure_idxs,
 					for (auto it = plan.help_blocks[ii].begin(); it != plan.help_blocks[ii].end(); it++) {
 						*it = rowcol2bid(i, *it);
 					}
+				}
+				for (auto it = plan.parity_idxs.begin(); it != plan.parity_idxs.end(); it++) {
+					*it = rowcol2bid(i, *it);
 				}
 
 				// update failed_map

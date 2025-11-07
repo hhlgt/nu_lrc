@@ -21,6 +21,8 @@ namespace ECProject
     std::string checkalive(std::string msg);
     // set parameters
     void set_erasure_coding_parameters(ParametersInfo paras);
+    // set log level
+    void set_log_level(Logger::LogLevel log_level);
     // set, return proxy's ip and port
     SetResp request_set(std::vector<std::string> object_keys,
         std::vector<size_t> object_sizes,
@@ -37,15 +39,16 @@ namespace ECProject
     MergeResp request_merge(int step_size);
 
     // scale
-    ScaleResp request_scale(float storage_overhead_upper, float gamma);
+    ScaleResp request_scale(float storage_overhead_upper, float gamma, bool optimized_recal = true);
+
+    // update hotness
+    void update_hotness(std::vector<std::vector<unsigned int>> ms_object_accessrates);
 
     // others
     std::vector<unsigned int> list_stripes();
-    // aux.cpp
-    void init_ec_schema(std::string config_file);
 
   private:
-    // aux.cpp
+    // auxs.cpp
     void init_cluster_info();
     void init_proxy_info();
     void reset_metadata();
@@ -76,10 +79,12 @@ namespace ECProject
             int stripe_id, std::vector<unsigned int> failed_ids,
             std::unordered_map<unsigned int, std::vector<int>>& failure_map);
     bool concrete_repair_plans(int stripe_id,
+                               std::vector<unsigned int>& new_blocks2nodes,
                                std::vector<RepairPlan>& repair_plans,
                                std::vector<MainRepairPlan>& main_repairs,
                                std::vector<std::vector<HelpRepairPlan>>& help_repairs);
     bool concrete_repair_plans_pc(int stripe_id,
+                                  std::vector<unsigned int>& new_blocks2nodes,
                                   std::vector<RepairPlan>& repair_plans,
                                   std::vector<MainRepairPlan>& main_repairs,
                                   std::vector<std::vector<HelpRepairPlan>>& help_repairs);
@@ -98,9 +103,11 @@ namespace ECProject
             int& cross_cluster_transfers, int& io_cnt);
     
     // scale.cpp
+    void compute_hotness(ScaleResp& response);
     std::vector<unsigned int> stripes_for_scaling(
             float storage_overhead_upper, float gamma, ScaleResp& response);
-    void do_scaling(const std::vector<unsigned int>& stripe_ids, ScaleResp& response);
+    void do_scaling(const std::vector<unsigned int>& stripe_ids, ScaleResp& response,
+                    bool optimized_recal = true);
     void generate_recalculation_plans(
             std::vector<std::vector<int>>& plans,
             ErasureCode* old_ec, ErasureCode* new_ec);
@@ -112,13 +119,13 @@ namespace ECProject
             const std::vector<std::vector<int>>& par2);
     std::vector<unsigned int> new_placement_for_partitions(
             bool if_common,
-            unsigned int stripe_id,
+            ErasureCode* new_ec,
             const std::vector<std::vector<int>>& old_pars,
             const std::vector<std::vector<int>>& new_pars,
             const std::vector<unsigned int>& old_placement_info,
             const std::unordered_map<int, int>& new2old);
     std::vector<unsigned int> new_placement_for_partitions_flat(
-            unsigned int stripe_id,
+            ErasureCode* new_ec,
             const std::vector<unsigned int>& old_placement_info,
             const std::unordered_map<int, int>& new2old);
 
@@ -145,6 +152,7 @@ namespace ECProject
     std::vector<std::vector<unsigned int>> merge_groups_;
     std::vector<unsigned int> free_clusters_;
     bool merged_flag_ = false;
-    Logger* logger_;
+    Logger* logger_ = nullptr;
+    Logger::LogLevel loglevel_ = Logger::LogLevel::DEBUG;
   };
 }

@@ -125,6 +125,7 @@ void LocallyRepairableCode::encode_partial_blocks(
     int parity_num = (int)parity_idxs.size();
     for (int i = 0; i < parity_num; i++) {
       my_assert(parity_idxs[i] >= k);
+
       bool flag = false;
       if (parity_idxs[i] < k + g) {
         for (auto idx : data_idxs) {
@@ -215,7 +216,8 @@ int LocallyRepairableCode::num_of_partial_blocks_to_transfer(
     bool flag = false;
     if (parity_idxs[i] < k + g) {
       for (auto idx : data_idxs) {
-        if (idx < k || idx == parity_idxs[i]) {
+        // if (idx < k || idx == parity_idxs[i]) {
+        if (idx < k + g) {
           flag = true;
           break;
         }

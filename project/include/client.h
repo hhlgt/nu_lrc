@@ -11,6 +11,7 @@ namespace ECProject {
     ~Client();
 
     void set_ec_parameters(ParametersInfo parameters);
+    void set_log_level(Logger::LogLevel log_level);
     // set
     double set(const std::string& value,
                const std::vector<std::string>& object_keys,
@@ -28,7 +29,10 @@ namespace ECProject {
     // merge
     MergeResp merge(int step_size);
     // scale
-    ScaleResp scale(float storage_overhead_upper, float gamma);
+    ScaleResp scale(float storage_overhead_upper, float gamma, bool optimized_recal = true);
+    // update hotness
+    void update_hotness(std::vector<std::vector<unsigned int>> ms_object_accessrates);
+
     // others
     std::vector<unsigned int> list_stripes();
 

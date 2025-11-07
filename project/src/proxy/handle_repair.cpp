@@ -495,6 +495,7 @@ namespace ECProject
       if (partial_scheme) {
         my_assert(parity_idx_ptr->size() > 0);
       }
+
       gettimeofday(&start_time, NULL);
       ec->encode_partial_blocks(data, coding, block_size,
           *original_blocks_idx_ptr, *parity_idx_ptr,

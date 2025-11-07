@@ -29,6 +29,8 @@ namespace ECProject
 
     // rpc调用
     bool checkalive();
+    // set log level
+    void set_log_level(Logger::LogLevel log_level);
     // set
     void handle_set(std::string src_ip, int src_port, bool ispull);
     // get
@@ -49,6 +51,7 @@ namespace ECProject
     asio::io_context io_context_{};
     asio::ip::tcp::acceptor acceptor_;
     Logger* logger_ = nullptr;
+    Logger::LogLevel loglevel_ = Logger::LogLevel::DEBUG;
     #ifdef IN_MEMORY
       #ifdef MEMCACHED
         memcached_st *memcached_;

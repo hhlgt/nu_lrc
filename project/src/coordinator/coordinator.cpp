@@ -9,6 +9,7 @@ namespace ECProject
     rpc_server_ = std::make_unique<coro_rpc::coro_rpc_server>(4, port_);
     rpc_server_->register_handler<&Coordinator::checkalive>(this);
     rpc_server_->register_handler<&Coordinator::set_erasure_coding_parameters>(this);
+    rpc_server_->register_handler<&Coordinator::set_log_level>(this);
     rpc_server_->register_handler<&Coordinator::request_set>(this);
     rpc_server_->register_handler<&Coordinator::commit_object>(this);
     rpc_server_->register_handler<&Coordinator::request_get>(this);
@@ -16,6 +17,7 @@ namespace ECProject
     rpc_server_->register_handler<&Coordinator::request_repair>(this);
     rpc_server_->register_handler<&Coordinator::request_merge>(this);
     rpc_server_->register_handler<&Coordinator::request_scale>(this);
+    rpc_server_->register_handler<&Coordinator::update_hotness>(this);
     rpc_server_->register_handler<&Coordinator::list_stripes>(this);
 
     cur_stripe_id_ = 0;
@@ -59,6 +61,15 @@ namespace ECProject
     ec_schema_.block_size = paras.block_size;
     ec_schema_.ec = ec_factory(paras.ec_type, paras.cp);
     reset_metadata();
+  }
+
+  void Coordinator::set_log_level(Logger::LogLevel log_level)
+  {
+    loglevel_ = log_level;
+    for (auto& proxy : proxies_) {
+      async_simple::coro::syncAwait(
+        proxy.second->call<&Proxy::set_log_level>(log_level));
+    }
   }
 
   SetResp Coordinator::request_set(
@@ -376,11 +387,29 @@ namespace ECProject
     return response;
   }
 
-  ScaleResp Coordinator::request_scale(float storage_overhead_upper, float gamma)
+  ScaleResp Coordinator::request_scale(float storage_overhead_upper, float gamma, bool optimized_recal)
   {
     ScaleResp response;
-    auto stripe_ids = stripes_for_scaling(storage_overhead_upper, gamma, response);
-    do_scaling(stripe_ids, response);
+    if (ec_schema_.ec_type == ECTYPE::NON_UNIFORM_LRC) {
+      auto stripe_ids = stripes_for_scaling(storage_overhead_upper, gamma, response);
+      do_scaling(stripe_ids, response, optimized_recal);
+    } else {
+      compute_hotness(response);
+    }
     return response;
+  }
+
+  void Coordinator::update_hotness(std::vector<std::vector<unsigned int>> ms_object_accessrates)
+  {
+    for (auto i = 0; i < ms_object_accessrates.size(); i++) {
+      my_assert(stripe_table_.find(i) != stripe_table_.end());
+      auto& stripe = stripe_table_[i];
+      auto& accessrates = ms_object_accessrates[i];
+      my_assert(accessrates.size() == stripe.objects.size());
+      for (auto j = 0; j < stripe.objects.size(); j++) {
+        auto key = stripe.objects[j];
+        commited_object_table_[key].access_cnt = accessrates[j];
+      }
+    }
   }
 }

@@ -20,6 +20,8 @@ namespace ECProject
 
     // rpc调用
     std::string checkalive(std::string msg);
+    // set log level
+    void set_log_level(Logger::LogLevel log_level);
     // encode and set
     void encode_and_store_object(PlacementInfo placement);
     // decode and get
@@ -46,6 +48,7 @@ namespace ECProject
 
     std::unordered_map<std::string, std::unique_ptr<coro_rpc::coro_rpc_client>> datanodes_;
     std::unique_ptr<coro_rpc::coro_rpc_server> rpc_server_{nullptr};
+    std::vector<std::string> datanode_ips_;
     int self_cluster_id_;
     int port_;
     int port_for_transfer_data_;
@@ -57,5 +60,6 @@ namespace ECProject
     std::mutex mutex_;
     std::condition_variable cv_;
     Logger* logger_ = nullptr;
+    Logger::LogLevel loglevel_ = Logger::LogLevel::DEBUG;
   };  
 }

@@ -67,6 +67,9 @@ namespace ECProject
     } else {
       ec = nullptr;
     }
+    if (ec != nullptr) {
+      ec->init_coding_parameters(cp);
+    }
     return ec;
   }
 
@@ -77,6 +80,9 @@ namespace ECProject
       rs = new RSCode(cp.k, cp.m);
     } else {
       rs = nullptr;
+    }
+    if (rs != nullptr) {
+      rs->init_coding_parameters(cp);
     }
     return rs;
   }
@@ -99,6 +105,9 @@ namespace ECProject
     } else {
       lrc = nullptr;
     }
+    if (lrc != nullptr) {
+      lrc->init_coding_parameters(cp);
+    }
     return lrc;
   }
 
@@ -112,6 +121,9 @@ namespace ECProject
     } else {
       pc = nullptr;
     }
+    if (pc != nullptr) {
+      pc->init_coding_parameters(cp);
+    }
     return pc;
   }
 
@@ -122,7 +134,8 @@ namespace ECProject
     return ec_factory(ec_type, cp);
   }
 
-  void parse_args(Logger* logger, ParametersInfo& paras, std::string config_file)
+  void parse_args(Logger* logger, ParametersInfo& paras,
+      ScaleParameters& scale_paras, std::string config_file)
   {
     std::unordered_map<std::string, std::string> config;
     std::ifstream file(config_file);
@@ -221,6 +234,36 @@ namespace ECProject
       std::cout << str << std::endl;
     } else {
       logger->log(Logger::LogLevel::DEBUG, str);
+    }
+    if (config.find("log_level") != config.end()) {
+      std::string log_level = config["log_level"];
+      if (log_level == "INFO") {
+        paras.loglevel = Logger::LogLevel::INFO;
+      } else if (log_level == "WARNING") {
+        paras.loglevel = Logger::LogLevel::WARNING;
+      } else if (log_level == "ERROR") {
+        paras.loglevel = Logger::LogLevel::ERROR;
+      } else if (log_level == "DEBUG") {
+        paras.loglevel = Logger::LogLevel::DEBUG;
+      } else {
+        std::cerr << "Unknown log_level: " << log_level << std::endl;
+        exit(0);
+      }
+    }
+    if (config.find("storage_overhead_upper_bound") != config.end()) {
+      scale_paras.storage_overhead_upper_bound = std::stof(config["storage_overhead_upper_bound"]);
+    }
+    if (config.find("gamma") != config.end()) {
+      scale_paras.gamma = std::stof(config["gamma"]);
+    }
+    if (config.find("change_rate") != config.end()) {
+      scale_paras.change_rate = std::stof(config["change_rate"]);
+    }
+    if (config.find("test_time") != config.end()) {
+      scale_paras.test_time = std::stoi(config["test_time"]);
+    }
+    if (config.find("optimized_recal") != config.end()) {
+      scale_paras.optimized_recal = (config["optimized_recal"] == "true");
     }
   }
 

@@ -12,6 +12,7 @@ namespace ECProject
     // port is for rpc, port + SOCKET_PORT_OFFSET is for socket
     rpc_server_ = std::make_unique<coro_rpc::coro_rpc_server>(1, port_);
     rpc_server_->register_handler<&Proxy::checkalive>(this);
+    rpc_server_->register_handler<&Proxy::set_log_level>(this);
     rpc_server_->register_handler<&Proxy::encode_and_store_object>(this);
     rpc_server_->register_handler<&Proxy::decode_and_get_object>(this);
     rpc_server_->register_handler<&Proxy::delete_blocks>(this);
@@ -51,8 +52,21 @@ namespace ECProject
     return msg; 
   }
 
+  // set log level
+  void Proxy::set_log_level(Logger::LogLevel log_level)
+  {
+    loglevel_ = log_level;
+    for (auto& datanode_ip : datanode_ips_) {
+      async_simple::coro::syncAwait(
+        datanodes_[datanode_ip]->call<&Datanode::set_log_level>(log_level));
+    }
+  }
+
   void Proxy::write_logs(Logger::LogLevel level, std::string& msg)
   {
+    if (level < loglevel_) {
+      return;
+    }
     if (level != Logger::LogLevel::DEBUG) {
       msg = "[Proxy" + std::to_string(self_cluster_id_) + "]" + msg;
     }
@@ -72,8 +86,10 @@ namespace ECProject
       cluster != nullptr; cluster = cluster->NextSiblingElement()) {
       std::string cluster_id(cluster->Attribute("id"));
       std::string proxy(cluster->Attribute("proxy"));
+      bool flag = false;
       if (proxy == ip_ + ":" + std::to_string(port_)) {
         self_cluster_id_ = std::stoi(cluster_id);
+        flag = true;
       }
       for (tinyxml2::XMLElement *node = cluster->FirstChildElement()->FirstChildElement();
           node != nullptr; node = node->NextSiblingElement()) {
@@ -83,6 +99,9 @@ namespace ECProject
         int port = std::stoi(node_uri.substr(node_uri.find(':') + 1, node_uri.size()));
         async_simple::coro::syncAwait(
             datanodes_[node_uri]->connect(ip, std::to_string(port)));
+        if (flag) {
+          datanode_ips_.push_back(node_uri);
+        }
       }
     }
     // init networkcore

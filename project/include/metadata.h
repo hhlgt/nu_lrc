@@ -11,7 +11,7 @@
 #define IF_SIMULATE_CROSS_CLUSTER true
 #define IF_TEST_TRHROUGHPUT false
 #define IF_DEBUG true
-#define IF_LOG_TO_FILE false
+#define IF_LOG_TO_FILE true
 #define IF_DIRECT_FROM_NODE true    // proxy can directly access data from nodes in other clusters
 #define SOCKET_PORT_OFFSET 500
 #define STORAGE_SERVER_OFFSET 1000
@@ -117,6 +117,16 @@ namespace ECProject
     MultiStripePR multistripe_placement_rule;
     CodingParameters cp;
     size_t block_size;
+    Logger::LogLevel loglevel;
+  };
+
+  struct ScaleParameters
+  {
+    float storage_overhead_upper_bound = 1.5;
+    float gamma = 0.3;
+    float change_rate = 0.1;
+    int test_time = 1;
+    bool optimized_recal = true;
   };
   
   struct PlacementInfo
@@ -250,56 +260,56 @@ namespace ECProject
 
   struct RepairResp
   {
-    double decoding_time;
-    double cross_cluster_time;
-    double repair_time;
-    double meta_time;
-    int cross_cluster_transfers;
-    int io_cnt;
-    bool success;
+    double decoding_time{0};
+    double cross_cluster_time{0};
+    double repair_time{0};
+    double meta_time{0};
+    int cross_cluster_transfers{0};
+    int io_cnt{0};
+    bool success{false};
   };
 
   struct MergeResp
   {
-    double computing_time;
-    double cross_cluster_time;
-    double merging_time;
-    double meta_time;
-    int cross_cluster_transfers;
-    int io_cnt;
-    bool ifmerged;
+    double computing_time{0};
+    double cross_cluster_time{0};
+    double merging_time{0};
+    double meta_time{0};
+    int cross_cluster_transfers{0};
+    int io_cnt{0};
+    bool ifmerged{false};
   };
 
   struct ScaleResp
   {
-    double computing_time;
-    double cross_cluster_time;
-    double scaling_time;
-    double meta_time;
-    int cross_cluster_transfers;
-    int io_cnt;
-    float old_storage_overhead;
-    float old_hotness;
-    float new_storage_overhead;
-    float new_hotness;
-    bool ifscaled;
+    double computing_time{0};
+    double cross_cluster_time{0};
+    double scaling_time{0};
+    double meta_time{0};
+    int cross_cluster_transfers{0};
+    int io_cnt{0};
+    float old_storage_overhead{0};
+    float old_hotness{0};
+    float new_storage_overhead{0};
+    float new_hotness{0};
+    bool ifscaled{false};
   };
 
   struct MainRepairResp
   {
-    double decoding_time;
-    double cross_cluster_time;
+    double decoding_time{0};
+    double cross_cluster_time{0};
   };
 
   struct MainRecalResp
   {
-    double computing_time;
-    double cross_cluster_time;
+    double computing_time{0};
+    double cross_cluster_time{0};
   };
 
   struct RelocateResp
   {
-    double cross_cluster_time;
+    double cross_cluster_time{0};
   };
   
   ECFAMILY check_ec_family(ECTYPE ec_type);
@@ -308,7 +318,7 @@ namespace ECProject
   LocallyRepairableCode* lrc_factory(ECTYPE ec_type, CodingParameters cp);
   ProductCode* pc_factory(ECTYPE ec_type, CodingParameters cp);
   ErasureCode* clone_ec(ECTYPE ec_type, ErasureCode* ec);
-  void parse_args(Logger* logger, ParametersInfo& paras, std::string config_file);
+  void parse_args(Logger* logger, ParametersInfo& paras, ScaleParameters& scale_paras, std::string config_file);
   int stripe_wide_after_merge(ParametersInfo paras, int step_size);
   std::string getStartTime();
   void deepcopy_codingparameters(const CodingParameters& src_cp, CodingParameters& des_cp);

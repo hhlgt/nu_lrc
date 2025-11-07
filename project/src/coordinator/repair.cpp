@@ -14,30 +14,27 @@ namespace ECProject
     double meta_time = 0;
     int cross_cluster_transfers = 0;
     int io_cnt = 0;
-    std::cout << stripe_id << " " << failed_ids[0] << std::endl;
     std::unordered_map<unsigned int, std::vector<int>> failures_map;
     check_out_failures(stripe_id, failed_ids, failures_map);
-    std::cout << "cp1" << std::endl;
     for (auto& pair : failures_map) {
       gettimeofday(&start_time, NULL);
       gettimeofday(&m_start_time, NULL);
       Stripe& stripe = stripe_table_[pair.first];
       stripe.ec->placement_rule = ec_schema_.placement_rule;
       stripe.ec->generate_partition();
-      std::cout << "cp2" << std::endl;
       find_out_stripe_partitions(pair.first);
       if (IF_DEBUG) {
         std::string msg = "";
-        // msg += "Stripe " + std::to_string(pair.first) + " block placement:\n";
-        // for (auto& vec : stripe.ec->partition_plan) {
-        //   unsigned int node_id = stripe.blocks2nodes[vec[0]];
-        //   unsigned int cluster_id = node_table_[node_id].map2cluster;
-        //   msg += std::to_string(cluster_id) + ": ";
-        //   for (int ele : vec) {
-        //     msg += "B" + std::to_string(ele) + "N" + std::to_string(stripe.blocks2nodes[ele]) + " ";
-        //   }
-        //   msg += "\n";
-        // }
+        msg += "Stripe " + std::to_string(pair.first) + " block placement:\n";
+        for (auto& vec : stripe.ec->partition_plan) {
+          unsigned int node_id = stripe.blocks2nodes[vec[0]];
+          unsigned int cluster_id = node_table_[node_id].map2cluster;
+          msg += std::to_string(cluster_id) + ": ";
+          for (int ele : vec) {
+            msg += "B" + std::to_string(ele) + "N" + std::to_string(stripe.blocks2nodes[ele]) + " ";
+          }
+          msg += "\n";
+        }
         msg += "Generating repair plan for failures { ";
         for (auto& failure : pair.second) {
           msg += std::to_string(failure) + " ";
@@ -79,10 +76,11 @@ namespace ECProject
       }
       std::vector<MainRepairPlan> main_repairs;
       std::vector<std::vector<HelpRepairPlan>> help_repairs;
+      std::vector<unsigned int> new_blocks2nodes;
       if (check_ec_family(ec_schema_.ec_type) == PCs) {
-        concrete_repair_plans_pc(pair.first, repair_plans, main_repairs, help_repairs);
+        concrete_repair_plans_pc(pair.first, new_blocks2nodes, repair_plans, main_repairs, help_repairs);
       } else {
-        concrete_repair_plans(pair.first, repair_plans, main_repairs, help_repairs);
+        concrete_repair_plans(pair.first, new_blocks2nodes, repair_plans, main_repairs, help_repairs);
       }
       
       if (IF_DEBUG) {
@@ -101,7 +99,7 @@ namespace ECProject
         auto resp = 
             async_simple::coro::syncAwait(proxies_[chosen_proxy]
                 ->call_for<&Proxy::main_repair>(
-                    std::chrono::seconds{0}, main_repairs[i])).value();
+                    std::chrono::seconds{600}, main_repairs[i])).value();
         lock_ptr->lock();
         decoding_time += resp.decoding_time;
         cross_cluster_time += resp.cross_cluster_time;
@@ -121,7 +119,7 @@ namespace ECProject
       {
         std::string chosen_proxy = proxy_ip + std::to_string(proxy_port);
         async_simple::coro::syncAwait(proxies_[chosen_proxy]
-            ->call_for<&Proxy::help_repair>(std::chrono::seconds{0}, help_repairs[i][j]));
+            ->call_for<&Proxy::help_repair>(std::chrono::seconds{600}, help_repairs[i][j]));
         if (IF_DEBUG) {
           logger_lock_ptr->lock();
           std::string msg = "[Thread" + std::to_string(j) + "] Selected help proxy "
@@ -179,13 +177,9 @@ namespace ECProject
         }
       }
       // update metadata
-      for (int i = 0; i < int(main_repairs.size()); i++) {
-        MainRepairPlan& tmp = main_repairs[i];
-        int j = 0;
-        for (auto& idx : tmp.failed_blocks_index) {
-          stripe.blocks2nodes[idx] = tmp.new_locations[j++].first;
-        }
-      }
+      stripe.blocks2nodes.clear();
+      stripe.blocks2nodes.insert(stripe.blocks2nodes.end(), new_blocks2nodes.begin(),
+                                 new_blocks2nodes.end());
       gettimeofday(&end_time, NULL);
       double temp_time = end_time.tv_sec - start_time.tv_sec +
           (end_time.tv_usec - start_time.tv_usec) * 1.0 / 1000000;
@@ -246,12 +240,14 @@ namespace ECProject
 
   bool Coordinator::concrete_repair_plans(
           int stripe_id,
+          std::vector<unsigned int>& new_blocks2nodes,
           std::vector<RepairPlan>& repair_plans,
           std::vector<MainRepairPlan>& main_repairs,
           std::vector<std::vector<HelpRepairPlan>>& help_repairs)
   {
     Stripe& stripe = stripe_table_[stripe_id];
-    std::vector<unsigned int> t_blocks2nodes(stripe.blocks2nodes.begin(),
+    new_blocks2nodes.clear();
+    new_blocks2nodes.insert(new_blocks2nodes.end(), stripe.blocks2nodes.begin(),
         stripe.blocks2nodes.end());
     // for new locations, to optimize
     std::unordered_map<unsigned int, std::vector<unsigned int>> free_nodes_in_clusters;
@@ -259,7 +255,7 @@ namespace ECProject
       std::unordered_map<int, unsigned int> map2clusters;
       int cnt = 0;
       for (auto& help_block : repair_plan.help_blocks) {
-        unsigned int nid = t_blocks2nodes[help_block[0]];
+        unsigned int nid = new_blocks2nodes[help_block[0]];
         unsigned int cid = node_table_[nid].map2cluster;
         map2clusters[cnt++] = cid;
       }
@@ -267,7 +263,7 @@ namespace ECProject
       unsigned int main_cid = 0;
       int max_cnt_val = 0;
       for (auto& idx : repair_plan.failure_idxs) {
-        unsigned int nid = t_blocks2nodes[idx];
+        unsigned int nid = new_blocks2nodes[idx];
         unsigned int cid = node_table_[nid].map2cluster;
         if (failures_cnt.find(cid) == failures_cnt.end()) {
           failures_cnt[cid] = 1;
@@ -282,7 +278,7 @@ namespace ECProject
       std::unordered_set<unsigned int> failed_cluster_sets;
       for (auto it = repair_plan.failure_idxs.begin();
            it != repair_plan.failure_idxs.end(); it++) {
-        unsigned int node_id = t_blocks2nodes[*it];
+        unsigned int node_id = new_blocks2nodes[*it];
         unsigned int cluster_id = node_table_[node_id].map2cluster;
         failed_cluster_sets.insert(cluster_id);
         if (free_nodes_in_clusters.find(cluster_id) ==
@@ -310,7 +306,7 @@ namespace ECProject
         }
         if (failed_cluster_sets.find(map2clusters[i]) != failed_cluster_sets.end()) {
           for (auto block_idx : repair_plan.help_blocks[i]) {
-            unsigned int node_id = t_blocks2nodes[block_idx];
+            unsigned int node_id = new_blocks2nodes[block_idx];
             std::string node_ip = node_table_[node_id].node_ip;
             int node_port = node_table_[node_id].node_port;
             main_plan.inner_cluster_help_blocks_info.push_back(
@@ -371,7 +367,7 @@ namespace ECProject
           }
           int num_of_help_blocks = 0;
           for (auto block_idx : repair_plan.help_blocks[i]) {
-            unsigned int node_id = t_blocks2nodes[block_idx];
+            unsigned int node_id = new_blocks2nodes[block_idx];
             std::string node_ip = node_table_[node_id].node_ip;
             int node_port = node_table_[node_id].node_port;
             help_plan.inner_cluster_help_blocks_info.push_back(
@@ -406,7 +402,7 @@ namespace ECProject
       }
       for(auto it = repair_plan.failure_idxs.begin();
           it != repair_plan.failure_idxs.end(); it++) {
-        unsigned int node_id = t_blocks2nodes[*it];
+        unsigned int node_id = new_blocks2nodes[*it];
         unsigned int cluster_id = node_table_[node_id].map2cluster;
         std::vector<unsigned int> &free_nodes = free_nodes_in_clusters[cluster_id];
         int ran_node_idx = -1;
@@ -417,11 +413,11 @@ namespace ECProject
         if (iter != free_nodes.end()) {
           free_nodes.erase(iter);
         }
-        t_blocks2nodes[*it] = new_node_id;
+        new_blocks2nodes[*it] = new_node_id;
         std::string node_ip = node_table_[new_node_id].node_ip;
         int node_port = node_table_[new_node_id].node_port;
         main_plan.new_locations.push_back(
-            std::make_pair(new_node_id, std::make_pair(node_ip, node_port)));
+            std::make_pair(cluster_id, std::make_pair(node_ip, node_port)));
       }
       main_repairs.push_back(main_plan);
       help_repairs.push_back(help_plans);
@@ -431,12 +427,14 @@ namespace ECProject
 
   bool Coordinator::concrete_repair_plans_pc(
           int stripe_id,
+          std::vector<unsigned int>& new_blocks2nodes,
           std::vector<RepairPlan>& repair_plans,
           std::vector<MainRepairPlan>& main_repairs,
           std::vector<std::vector<HelpRepairPlan>>& help_repairs)
   {
     Stripe& stripe = stripe_table_[stripe_id];
-    std::vector<unsigned int> t_blocks2nodes(stripe.blocks2nodes.begin(),
+    new_blocks2nodes.clear();
+    new_blocks2nodes.insert(new_blocks2nodes.end(), stripe.blocks2nodes.begin(),
         stripe.blocks2nodes.end());
     std::unordered_map<unsigned int, std::vector<unsigned int>> free_nodes_in_clusters;
     CodingParameters cp;
@@ -447,7 +445,7 @@ namespace ECProject
       std::unordered_map<int, unsigned int> map2clusters;
       int cnt = 0;
       for (auto& help_block : repair_plan.help_blocks) {
-        unsigned int nid = t_blocks2nodes[help_block[0]];
+        unsigned int nid = new_blocks2nodes[help_block[0]];
         unsigned int cid = node_table_[nid].map2cluster;
         map2clusters[cnt++] = cid;
       }
@@ -455,7 +453,7 @@ namespace ECProject
       unsigned int main_cid = 0;
       int max_cnt_val = 0;
       for (auto& idx : repair_plan.failure_idxs) {
-        unsigned int nid = t_blocks2nodes[idx];
+        unsigned int nid = new_blocks2nodes[idx];
         unsigned int cid = node_table_[nid].map2cluster;
         if (failures_cnt.find(cid) == failures_cnt.end()) {
           failures_cnt[cid] = 1;
@@ -471,7 +469,7 @@ namespace ECProject
       std::unordered_set<unsigned int> failed_cluster_sets;
       for (auto it = repair_plan.failure_idxs.begin();
            it != repair_plan.failure_idxs.end(); it++) {
-        unsigned int node_id = t_blocks2nodes[*it];
+        unsigned int node_id = new_blocks2nodes[*it];
         unsigned int cluster_id = node_table_[node_id].map2cluster;
         failed_cluster_sets.insert(cluster_id);
         if (free_nodes_in_clusters.find(cluster_id) ==
@@ -506,7 +504,7 @@ namespace ECProject
         }
         if (failed_cluster_sets.find(map2clusters[i]) != failed_cluster_sets.end()) {
           for (auto block_idx : repair_plan.help_blocks[i]) {
-            unsigned int node_id = t_blocks2nodes[block_idx];
+            unsigned int node_id = new_blocks2nodes[block_idx];
             std::string node_ip = node_table_[node_id].node_ip;
             int node_port = node_table_[node_id].node_port;
             pc.bid2rowcol(block_idx, row, col);
@@ -592,7 +590,7 @@ namespace ECProject
           }
           int num_of_help_blocks = 0;
           for (auto block_idx : repair_plan.help_blocks[i]) {
-            unsigned int node_id = t_blocks2nodes[block_idx];
+            unsigned int node_id = new_blocks2nodes[block_idx];
             std::string node_ip = node_table_[node_id].node_ip;
             int node_port = node_table_[node_id].node_port;
             pc.bid2rowcol(block_idx, row, col);
@@ -633,7 +631,7 @@ namespace ECProject
       }
       for(auto it = repair_plan.failure_idxs.begin();
           it != repair_plan.failure_idxs.end(); it++) {
-        unsigned int node_id = t_blocks2nodes[*it];
+        unsigned int node_id = new_blocks2nodes[*it];
         unsigned int cluster_id = node_table_[node_id].map2cluster;
         std::vector<unsigned int> &free_nodes = free_nodes_in_clusters[cluster_id];
         int ran_node_idx = -1;
@@ -645,11 +643,11 @@ namespace ECProject
           free_nodes.erase(iter);
         }
 
-        t_blocks2nodes[*it] = new_node_id;
+        new_blocks2nodes[*it] = new_node_id;
         std::string node_ip = node_table_[new_node_id].node_ip;
         int node_port = node_table_[new_node_id].node_port;
         main_plan.new_locations.push_back(
-            std::make_pair(new_node_id, std::make_pair(node_ip, node_port)));
+            std::make_pair(cluster_id, std::make_pair(node_ip, node_port)));
       }
       main_repairs.push_back(main_plan);
       help_repairs.push_back(help_plans);
@@ -697,8 +695,7 @@ namespace ECProject
         io_cnt += num_of_help_blocks;
       }
       for (auto& kv : main_repair[i].new_locations) {
-        unsigned int cid = node_table_[kv.first].map2cluster;
-        if (cid != main_repair[i].cluster_id) {
+        if (kv.first != main_repair[i].cluster_id) {
           cross_cluster_transfers++;
         }
       }

@@ -4,6 +4,9 @@ namespace ECProject
 {
   void Coordinator::write_logs(Logger::LogLevel level, std::string& msg)
   {
+    if (level < loglevel_) {
+      return;
+    }
     if (level != Logger::LogLevel::DEBUG) {
       msg = "[Coordinator] " + msg;
     }
@@ -12,13 +15,6 @@ namespace ECProject
     } else {
       printf("%s", msg.c_str());
     }
-  }
-
-  void Coordinator::init_ec_schema(std::string config_file)
-  {
-    ParametersInfo paras;
-    parse_args(logger_, paras, config_file);
-    set_erasure_coding_parameters(paras);
   }
   
   void Coordinator::init_cluster_info()

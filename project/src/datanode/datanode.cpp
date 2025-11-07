@@ -12,6 +12,7 @@ namespace ECProject
     // port is for rpc 
     rpc_server_ = std::make_unique<coro_rpc::coro_rpc_server>(1, port_);
     rpc_server_->register_handler<&Datanode::checkalive>(this);
+    rpc_server_->register_handler<&Datanode::set_log_level>(this);
     rpc_server_->register_handler<&Datanode::handle_set>(this);
     rpc_server_->register_handler<&Datanode::handle_get>(this);
     rpc_server_->register_handler<&Datanode::handle_delete>(this);
@@ -76,9 +77,20 @@ namespace ECProject
     return true;
   }
 
+  // set log level
+  void Datanode::set_log_level(Logger::LogLevel log_level)
+  {
+    loglevel_ = log_level;
+  }
+
   void Datanode::write_logs(Logger::LogLevel level, std::string& msg)
   {
-    msg = "[Datanode" + std::to_string(port_) + "]" + msg;
+    if (level < loglevel_) {
+      return;
+    }
+    if (level != Logger::LogLevel::DEBUG) {
+      msg = "[Datanode" + std::to_string(port_) + "]" + msg;
+    }
     if (IF_LOG_TO_FILE) {
       logger_->log(level, msg);
     } else {
