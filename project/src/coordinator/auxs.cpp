@@ -10,7 +10,7 @@ namespace ECProject
     if (level != Logger::LogLevel::DEBUG) {
       msg = "[Coordinator] " + msg;
     }
-    if (IF_LOG_TO_FILE) {
+    if (IF_LOG_TO_FILE && logger_) {
       logger_->log(level, msg);
     } else {
       printf("%s", msg.c_str());

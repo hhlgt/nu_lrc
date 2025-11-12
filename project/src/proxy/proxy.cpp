@@ -70,7 +70,7 @@ namespace ECProject
     if (level != Logger::LogLevel::DEBUG) {
       msg = "[Proxy" + std::to_string(self_cluster_id_) + "]" + msg;
     }
-    if (IF_LOG_TO_FILE) {
+    if (IF_LOG_TO_FILE && logger_) {
       logger_->log(level, msg);
     } else {
       printf("%s", msg.c_str());
