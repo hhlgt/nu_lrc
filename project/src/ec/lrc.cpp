@@ -4947,10 +4947,10 @@ void Non_Uni_LRC::generate_coding_parameters_for_a_stripe(
     object_length.push_back(tmp);
     k += tmp;
   }
-  l = int(round(storage_overhead * float(k))) - k - g;
+  l = std::max(int(round(storage_overhead * float(k))) - k - g, 1);
   r = (k + g + l - 1) / l;
   if ((k + g + r - 1) / r != l) {
-    l = (k + g + r - 1) / r;
+    l = std::max((k + g + r - 1) / r, 1);
     storage_overhead = float(k + g + l) / float(k);
   }
   m = l + g;
