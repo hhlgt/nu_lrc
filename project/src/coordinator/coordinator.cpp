@@ -66,9 +66,11 @@ namespace ECProject
   void Coordinator::set_log_level(Logger::LogLevel log_level)
   {
     loglevel_ = log_level;
-    for (auto& proxy : proxies_) {
-      async_simple::coro::syncAwait(
-        proxy.second->call<&Proxy::set_log_level>(log_level));
+    if (!IF_SIMULATION) {
+      for (auto& proxy : proxies_) {
+        async_simple::coro::syncAwait(
+          proxy.second->call<&Proxy::set_log_level>(log_level));
+      }
     }
   }
 
@@ -387,10 +389,11 @@ namespace ECProject
     return response;
   }
 
-  ScaleResp Coordinator::request_scale(float storage_overhead_upper, float gamma, bool optimized_recal)
+  ScaleResp Coordinator::request_scale(float storage_overhead_upper,
+      float gamma, bool optimized_recal, bool dynamic)
   {
     ScaleResp response;
-    if (ec_schema_.ec_type == ECTYPE::NON_UNIFORM_LRC) {
+    if (ec_schema_.ec_type == ECTYPE::NON_UNIFORM_LRC && dynamic) {
       auto stripe_ids = stripes_for_scaling(storage_overhead_upper, gamma, response);
       do_scaling(stripe_ids, response, optimized_recal);
     } else {

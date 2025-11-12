@@ -29,7 +29,8 @@ namespace ECProject {
     // merge
     MergeResp merge(int step_size);
     // scale
-    ScaleResp scale(float storage_overhead_upper, float gamma, bool optimized_recal = true);
+    ScaleResp scale(float storage_overhead_upper, float gamma,
+        bool optimized_recal = true, bool dynamic = true);
     // update hotness
     void update_hotness(std::vector<std::vector<unsigned int>> ms_object_accessrates);
 

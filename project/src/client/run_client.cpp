@@ -539,7 +539,7 @@ void test_single_block_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 2;
+  int run_time = 20;
   int tot_cnt = 0;
   std::cout << "Single-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
@@ -552,68 +552,69 @@ void test_single_block_repair_lrc_periodically(Client &client,
     int temp_io_cnt = 0;
     int cnt = 0;
     for (int j = 0; j < stripe_num; j++) {
+      unsigned int sid = stripe_ids[j];
       int k = 0;
       int ak = 0;
       int idx = 0;
-      for (auto& size : ms_object_sizes[j]) {
+      for (auto& size : ms_object_sizes[sid]) {
         k += size / block_size;
-        ak += (size / block_size) * ms_object_accessrates[j][idx++];
+        ak += (size / block_size) * ms_object_accessrates[sid][idx++];
       }
       int a_avg = ak / k;
-      int l = int(round(ms_storge_overhead[j] * k)) - k - ms_g[j];
-      int r = (k + ms_g[j] + l - 1) / l;
-      l = (k + ms_g[j] + r - 1) / r;
+      int l = int(round(ms_storge_overhead[sid] * k)) - k - ms_g[sid];
+      int r = (k + ms_g[sid] + l - 1) / l;
+      l = (k + ms_g[sid] + r - 1) / r;
 
-      int n_files = int(ms_object_sizes[j].size());
-      std::vector<size_t> object_sizes = ms_object_sizes[j];
-      std::vector<unsigned int> object_accessrates = ms_object_accessrates[j];
+      int n_files = int(ms_object_sizes[sid].size());
+      std::vector<size_t> object_sizes = ms_object_sizes[sid];
+      std::vector<unsigned int> object_accessrates = ms_object_accessrates[sid];
       int lowerbound = 0, upperbound = 0;
       for(int ii = 0; ii < n_files; ii++)
       {
         int obj_len = object_sizes[ii] / block_size;
         upperbound += obj_len;
-        // for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
-        //   int ran_fblock_id = random_index(k);  // each data block has the same probability of being failed
-        //   if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
-        //     std::vector<unsigned int> failures;
-        //     failures.push_back((unsigned int)ran_fblock_id);
-        //     auto resp = client.blocks_repair(failures, stripe_ids[j]);
-        //     if (resp.success) {
-        //       temp_repair += resp.repair_time;
-        //       temp_decoding += resp.decoding_time;
-        //       temp_cross_cluster += resp.cross_cluster_time;
-        //       temp_meta += resp.meta_time;
-        //       temp_cc_transfers += resp.cross_cluster_transfers;
-        //       temp_io_cnt += resp.io_cnt;
-        //       cnt++;
-        //     }
-        //   }
-        // }
-        
-        int ar = object_accessrates[ii];
-        for(int jj = lowerbound; jj < upperbound; jj++)
-        {
-          std::vector<unsigned int> failures;
-          failures.push_back(jj);
-          auto resp = client.blocks_repair(failures, stripe_ids[j]);
-          if (resp.success) {
-            temp_repair += resp.repair_time * ar;
-            temp_decoding += resp.decoding_time * ar;
-            temp_cross_cluster += resp.cross_cluster_time * ar;
-            temp_meta += resp.meta_time * ar;
-            temp_cc_transfers += resp.cross_cluster_transfers * ar;
-            temp_io_cnt += resp.io_cnt * ar;
-            cnt += ar;
+        for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
+          int ran_fblock_id = random_index(k);  // each data block has the same probability of being failed
+          if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
+            std::vector<unsigned int> failures;
+            failures.push_back((unsigned int)ran_fblock_id);
+            auto resp = client.blocks_repair(failures, sid);
+            if (resp.success) {
+              temp_repair += resp.repair_time;
+              temp_decoding += resp.decoding_time;
+              temp_cross_cluster += resp.cross_cluster_time;
+              temp_meta += resp.meta_time;
+              temp_cc_transfers += resp.cross_cluster_transfers;
+              temp_io_cnt += resp.io_cnt;
+              cnt++;
+            }
           }
         }
+        
+        // int ar = object_accessrates[ii];
+        // for(int jj = lowerbound; jj < upperbound; jj++)
+        // {
+        //   std::vector<unsigned int> failures;
+        //   failures.push_back(jj);
+        //   auto resp = client.blocks_repair(failures, sid);
+        //   if (resp.success) {
+        //     temp_repair += resp.repair_time * ar;
+        //     temp_decoding += resp.decoding_time * ar;
+        //     temp_cross_cluster += resp.cross_cluster_time * ar;
+        //     temp_meta += resp.meta_time * ar;
+        //     temp_cc_transfers += resp.cross_cluster_transfers * ar;
+        //     temp_io_cnt += resp.io_cnt * ar;
+        //     cnt += ar;
+        //   }
+        // }
 
         lowerbound += obj_len;
       }
       if (if_node_repair) {
-        for (auto ii = k; ii < k + ms_g[j] + l; ii++) {
+        for (auto ii = k; ii < k + ms_g[sid] + l; ii++) {
           std::vector<unsigned int> failures;
           failures.push_back((unsigned int)ii);
-          auto resp = client.blocks_repair(failures, stripe_ids[j]);
+          auto resp = client.blocks_repair(failures, sid);
           if (resp.success) {
             temp_repair += resp.repair_time * a_avg;
             temp_decoding += resp.decoding_time * a_avg;
@@ -677,7 +678,7 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 1;
+  int run_time = 20;
   int tot_cnt = 0;
   std::cout << "Two-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
@@ -690,84 +691,85 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
     int temp_io_cnt = 0;
     int cnt = 0;
     for (int j = 0; j < stripe_num; j++) {
+      unsigned int sid = stripe_ids[j];
       int k = 0;
       int ak = 0;
       int idx = 0;
       int bid = 0;
       std::unordered_map<int, int> b2f;
-      for (auto& size : ms_object_sizes[j]) {
+      for (auto& size : ms_object_sizes[sid]) {
         int ki = size / block_size;
         k += ki;
-        ak += ki * ms_object_accessrates[j][idx];
+        ak += ki * ms_object_accessrates[sid][idx];
         for (int ii = 0; ii < ki; ii++) {
           b2f[bid++] = idx;
         }
         ++idx;
       }
       int a_avg = ak / k;
-      int l = int(round(ms_storge_overhead[j] * k)) - k - ms_g[j];
-      int r = (k + ms_g[j] + l - 1) / l;
-      l = (k + ms_g[j] + r - 1) / r;
+      int l = int(round(ms_storge_overhead[sid] * k)) - k - ms_g[sid];
+      int r = (k + ms_g[sid] + l - 1) / l;
+      l = (k + ms_g[sid] + r - 1) / r;
 
-      // int n_files = int(ms_object_sizes[j].size());
-      // std::vector<size_t> object_sizes = ms_object_sizes[j];
-      // std::vector<unsigned int> object_accessrates = ms_object_accessrates[j];
-      // int lowerbound = 0, upperbound = 0;
-      // for(int ii = 0; ii < n_files; ii++)
-      // {
-      //   int file_len = object_sizes[ii] / block_size;
-      //   upperbound += file_len;
-      //   for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
-      //     std::vector<int> ran_fblock_ids;
-      //     random_n_num(0, k - 1, 2, ran_fblock_ids);
-      //     bool flag = false;
-      //     for(int ran_fblock_id : ran_fblock_ids) { // each data block has the same probability of being failed
-      //       if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
-      //         flag = true;
-      //         break;
-      //       }
-      //     }
-      //     if(flag) {// a block in requested file failed
-      //       std::vector<unsigned int> failures;
-      //       for (auto& id : ran_fblock_ids) {
-      //         failures.push_back((unsigned int)id); 
-      //       }
-      //       auto resp = client.blocks_repair(failures, stripe_ids[j]);
-      //       if (resp.success) {
-      //         temp_repair += resp.repair_time;
-      //         temp_decoding += resp.decoding_time;
-      //         temp_cross_cluster += resp.cross_cluster_time;
-      //         temp_meta += resp.meta_time;
-      //         temp_cc_transfers += resp.cross_cluster_transfers;
-      //         temp_io_cnt += resp.io_cnt;
-      //         cnt++;
-      //       }
-      //     }
-      //   }
-      //   lowerbound += file_len;
-      // }
-
-      for (int ii = 0; ii < k; ii++) {
-        for (int jj = ii + 1; jj < k; jj++) {
-          int ran_num = random_index(100);
-          if (ran_num < 20) {
+      int n_files = int(ms_object_sizes[sid].size());
+      std::vector<size_t> object_sizes = ms_object_sizes[sid];
+      std::vector<unsigned int> object_accessrates = ms_object_accessrates[sid];
+      int lowerbound = 0, upperbound = 0;
+      for(int ii = 0; ii < n_files; ii++)
+      {
+        int file_len = object_sizes[ii] / block_size;
+        upperbound += file_len;
+        for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
+          std::vector<int> ran_fblock_ids;
+          random_n_num(0, k - 1, 2, ran_fblock_ids);
+          bool flag = false;
+          for(int ran_fblock_id : ran_fblock_ids) { // each data block has the same probability of being failed
+            if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
+              flag = true;
+              break;
+            }
+          }
+          if(flag) {// a block in requested file failed 
             std::vector<unsigned int> failures;
-            failures.push_back((unsigned int)ii);
-            failures.push_back((unsigned int)jj);
-            int weight = (ms_object_accessrates[j][b2f[ii]] + ms_object_accessrates[j][b2f[jj]]) / 2;
-            auto resp = client.blocks_repair(failures, stripe_ids[j]);
+            for (auto& id : ran_fblock_ids) {
+              failures.push_back((unsigned int)id); 
+            }
+            auto resp = client.blocks_repair(failures, sid);
             if (resp.success) {
-              temp_repair += resp.repair_time * weight;
-              temp_decoding += resp.decoding_time * weight;
-              temp_cross_cluster += resp.cross_cluster_time * weight;
-              temp_meta += resp.meta_time * weight;
-              temp_cc_transfers += resp.cross_cluster_transfers * weight;
-              temp_io_cnt += resp.io_cnt * weight;
-              cnt += weight;
+              temp_repair += resp.repair_time;
+              temp_decoding += resp.decoding_time;
+              temp_cross_cluster += resp.cross_cluster_time;
+              temp_meta += resp.meta_time;
+              temp_cc_transfers += resp.cross_cluster_transfers;
+              temp_io_cnt += resp.io_cnt;
+              cnt++;
             }
           }
         }
+        lowerbound += file_len;
       }
+
+      // for (int ii = 0; ii < k; ii++) {
+      //   for (int jj = ii + 1; jj < k; jj++) {
+      //     int ran_num = random_index(100);
+      //     if (ran_num < 20) {
+      //       std::vector<unsigned int> failures;
+      //       failures.push_back((unsigned int)ii);
+      //       failures.push_back((unsigned int)jj);
+      //       int weight = (ms_object_accessrates[sid][b2f[ii]] + ms_object_accessrates[sid][b2f[jj]]) / 2;
+      //       auto resp = client.blocks_repair(failures, sid);
+      //       if (resp.success) {
+      //         temp_repair += resp.repair_time * weight;
+      //         temp_decoding += resp.decoding_time * weight;
+      //         temp_cross_cluster += resp.cross_cluster_time * weight;
+      //         temp_meta += resp.meta_time * weight;
+      //         temp_cc_transfers += resp.cross_cluster_transfers * weight;
+      //         temp_io_cnt += resp.io_cnt * weight;
+      //         cnt += weight;
+      //       }
+      //     }
+      //   }
+      // }
     }
     repair_times.push_back(temp_repair);
     decoding_times.push_back(temp_decoding);
@@ -856,10 +858,11 @@ void test_repair_performance_periodically_v2(
     }
     ms_object_keys.emplace_back(object_keys);
   }
+  bool dynamic = true;
 
   for (int t = 0; t < 3; ++t) {
     if (t == 1) {
-      scale_paras.optimized_recal = false;
+      dynamic = false;
     } else if (t == 2) {
       paras.ec_type = ECTYPE::UNIFORM_CAUCHY_LRC;
     } 
@@ -941,7 +944,7 @@ void test_repair_performance_periodically_v2(
       
       // scale
       auto resp = client.scale(scale_paras.storage_overhead_upper_bound,
-              scale_paras.gamma, scale_paras.optimized_recal);
+              scale_paras.gamma, scale_paras.optimized_recal, dynamic);
       if (resp.ifscaled) {
         std::cout << "[SCALE] scale time: " << resp.scaling_time
                   << ", computing time: " << resp.computing_time

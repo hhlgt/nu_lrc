@@ -7,7 +7,7 @@
 #include "ec/pc.h"
 #include "logger.h"
 
-#define IF_SIMULATION false
+#define IF_SIMULATION true
 #define IF_SIMULATE_CROSS_CLUSTER true
 #define IF_TEST_TRHROUGHPUT false
 #define IF_DEBUG true

@@ -172,12 +172,13 @@ namespace ECProject
     return response;
   }
 
-  ScaleResp Client::scale(float storage_overhead_upper, float gamma, bool optimized_recal)
+  ScaleResp Client::scale(float storage_overhead_upper, float gamma,
+      bool optimized_recal, bool dynamic)
   {
     auto response =
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_scale>(
-                std::chrono::seconds{0}, storage_overhead_upper, gamma, optimized_recal)).value();
+                std::chrono::seconds{0}, storage_overhead_upper, gamma, optimized_recal, dynamic)).value();
     return response;
   }
 
