@@ -30,6 +30,32 @@ namespace ECProject
     {"HV_PC", HV_PC}
   };
 
+  static const std::unordered_map<MultiStripePR, std::string> mspr2str = {
+    {RAND, "RAND"},
+    {DISPERSED, "DISPERSED"},
+    {AGGREGATED, "AGGREGATED"},
+    {HORIZONTAL, "HORIZONTAL"},
+    {VERTICAL, "VERTICAL"}
+  };
+
+  static const std::unordered_map<PlacementRule, std::string> pr2str = {
+    {FLAT, "FLAT"},
+    {RANDOM, "RANDOM"},
+    {OPTIMAL, "OPTIMAL"}
+  };
+
+  static const std::unordered_map<ECTYPE, std::string> ec2str = {
+    {RS, "RS"},
+    {AZURE_LRC, "AZURE_LRC"},
+    {AZURE_LRC_1, "AZURE_LRC_1"},
+    {OPTIMAL_LRC, "OPTIMAL_LRC"},
+    {OPTIMAL_CAUCHY_LRC, "OPTIMAL_CAUCHY_LRC"},
+    {UNIFORM_CAUCHY_LRC, "UNIFORM_CAUCHY_LRC"},
+    {NON_UNIFORM_LRC, "NON_UNIFORM_LRC"},
+    {PC, "PC"},
+    {HV_PC, "HV_PC"}
+  };
+
   ECFAMILY check_ec_family(ECTYPE ec_type)
   {
     if (ec_type == AZURE_LRC || ec_type == AZURE_LRC_1 ||
@@ -211,30 +237,6 @@ namespace ECProject
       }
     }
 
-    std::string str = "*-*-*-*-*-*-*-EC-Info-*-*-*-*-*-*-*\n";
-    str += "Partial?:" + std::to_string(paras.partial_decoding)
-              + " P-S:" + std::to_string(paras.partial_scheme)
-              + " R-P:" + std::to_string(paras.repair_priority)
-              + " R-M:" + std::to_string(paras.repair_method) + "\n";
-    str += config["ec_type"] + " " + config["placement_rule"] + "(s) "
-              + config["multistripe_placement_rule"] + "(m)\n";
-    if (check_ec_family(paras.ec_type) == LRCs) {
-      str += "(" + std::to_string(paras.cp.k) + "," + std::to_string(paras.cp.l)
-                + "," + std::to_string(paras.cp.g) + ") ";
-    } else if (check_ec_family(paras.ec_type) == PCs) {
-      str += "(" + std::to_string(paras.cp.k1) + "," + std::to_string(paras.cp.m1)
-             + "," + std::to_string(paras.cp.k2) + "," + std::to_string(paras.cp.m2) + ") ";
-    } else {
-      str += "(" + std::to_string(paras.cp.k) + "," + std::to_string(paras.cp.m) + ") ";
-    }
-    str += std::to_string(paras.cp.x) + "(x) "
-              + std::to_string(paras.block_size) + "(bytes)\n";
-    str += "*-*-*-*-*-*-*-EC-Info-*-*-*-*-*-*-*-*\n";
-    if (logger == nullptr || !IF_LOG_TO_FILE) {
-      std::cout << str << std::endl;
-    } else {
-      logger->log(Logger::LogLevel::DEBUG, str);
-    }
     if (config.find("log_level") != config.end()) {
       std::string log_level = config["log_level"];
       if (log_level == "INFO") {
@@ -314,6 +316,34 @@ namespace ECProject
     des_cp.krs.clear();
     for (auto pair : src_cp.krs) {
       des_cp.krs.emplace_back(pair);
+    }
+  }
+
+  void print_ec_info(Logger* logger, const ParametersInfo& paras)
+  {
+    std::string str = "*-*-*-*-*-*-*-EC-Info-*-*-*-*-*-*-*\n";
+    str += "Partial?:" + std::to_string(paras.partial_decoding)
+              + " P-S:" + std::to_string(paras.partial_scheme)
+              + " R-P:" + std::to_string(paras.repair_priority)
+              + " R-M:" + std::to_string(paras.repair_method) + "\n";
+    str += ec2str.at(paras.ec_type) + " " + pr2str.at(paras.placement_rule) + "(s) "
+              + mspr2str.at(paras.multistripe_placement_rule) + "(m)\n";
+    if (check_ec_family(paras.ec_type) == LRCs) {
+      str += "(" + std::to_string(paras.cp.k) + "," + std::to_string(paras.cp.l)
+                + "," + std::to_string(paras.cp.g) + ") ";
+    } else if (check_ec_family(paras.ec_type) == PCs) {
+      str += "(" + std::to_string(paras.cp.k1) + "," + std::to_string(paras.cp.m1)
+             + "," + std::to_string(paras.cp.k2) + "," + std::to_string(paras.cp.m2) + ") ";
+    } else {
+      str += "(" + std::to_string(paras.cp.k) + "," + std::to_string(paras.cp.m) + ") ";
+    }
+    str += std::to_string(paras.cp.x) + "(x) "
+              + std::to_string(paras.block_size) + "(bytes)\n";
+    str += "*-*-*-*-*-*-*-EC-Info-*-*-*-*-*-*-*-*\n";
+    if (logger == nullptr || !IF_LOG_TO_FILE) {
+      std::cout << str << std::endl;
+    } else {
+      logger->log(Logger::LogLevel::DEBUG, str);
     }
   }
 }

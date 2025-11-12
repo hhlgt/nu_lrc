@@ -860,12 +860,18 @@ void test_repair_performance_periodically_v2(
   }
   bool dynamic = true;
 
-  for (int t = 0; t < 3; ++t) {
+  for (int t = 0; t < 4; ++t) {
     if (t == 1) {
-      dynamic = false;
+      scale_paras.optimized_recal = false;
     } else if (t == 2) {
+      dynamic = false;
+      scale_paras.optimized_recal = true;
+    } else if (t == 3) {
       paras.ec_type = ECTYPE::UNIFORM_CAUCHY_LRC;
     } 
+
+    print_ec_info(nullptr, paras);
+
     // set erasure coding parameters
     client.set_ec_parameters(paras);
 
@@ -1137,8 +1143,12 @@ int main(int argc, char **argv)
   int failed_num = std::stoi(argv[4]);
   my_assert(0 <= failed_num && failed_num <= 2);
   
+  ParametersInfo paras2 = paras;
+  ScaleParameters scale_paras2 = scale_paras;
   // test_repair_performance_periodically(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num);
   test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num);
+  paras2.placement_rule = PlacementRule::OPTIMAL;
+  test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras2, scale_paras2, failed_num);
 
   return 0;
 }

@@ -7,10 +7,10 @@
 #include "ec/pc.h"
 #include "logger.h"
 
-#define IF_SIMULATION true
+#define IF_SIMULATION false
 #define IF_SIMULATE_CROSS_CLUSTER true
 #define IF_TEST_TRHROUGHPUT false
-#define IF_DEBUG true
+#define IF_DEBUG false
 #define IF_LOG_TO_FILE true
 #define IF_DIRECT_FROM_NODE true    // proxy can directly access data from nodes in other clusters
 #define SOCKET_PORT_OFFSET 500
@@ -322,4 +322,5 @@ namespace ECProject
   int stripe_wide_after_merge(ParametersInfo paras, int step_size);
   std::string getStartTime();
   void deepcopy_codingparameters(const CodingParameters& src_cp, CodingParameters& des_cp);
+  void print_ec_info(Logger* logger, const ParametersInfo& paras);
 }
