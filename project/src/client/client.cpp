@@ -40,7 +40,7 @@ namespace ECProject
     auto response =
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_set>(
-                std::chrono::seconds{0}, object_keys, object_sizes,
+                std::chrono::seconds{600}, object_keys, object_sizes,
                 object_accessrates, storage_overhead, g)).value();
         
     std::cout << "[SET] Send objects to proxy_address:" 
@@ -150,7 +150,7 @@ namespace ECProject
     auto response = 
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_repair>(
-                std::chrono::seconds{0}, failed_node_ids, -1)).value();
+                std::chrono::seconds{600}, failed_node_ids, -1)).value();
     return response;
   }
 
@@ -159,7 +159,7 @@ namespace ECProject
     auto response = 
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_repair>(
-                std::chrono::seconds{0}, failed_block_ids, stripe_id)).value();
+                std::chrono::seconds{600}, failed_block_ids, stripe_id)).value();
     return response;
   }
 
@@ -168,7 +168,7 @@ namespace ECProject
     auto response =
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_merge>(
-                std::chrono::seconds{0}, step_size)).value();
+                std::chrono::seconds{600}, step_size)).value();
     return response;
   }
 
@@ -178,7 +178,7 @@ namespace ECProject
     auto response =
         async_simple::coro::syncAwait(
             rpc_coordinator_->call_for<&Coordinator::request_scale>(
-                std::chrono::seconds{0}, storage_overhead_upper, gamma, optimized_recal, dynamic)).value();
+                std::chrono::seconds{600}, storage_overhead_upper, gamma, optimized_recal, dynamic)).value();
     return response;
   }
 

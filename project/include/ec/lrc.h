@@ -357,6 +357,11 @@ namespace ECProject
 		Non_Uni_LRC(int k, int l, int g) : Uni_Cau_LRC(k, l, g) {}
 		~Non_Uni_LRC() override {}
 
+		void encode_partial_blocks_local(
+				char **data_ptrs, char **coding_ptrs, int block_size,
+				std::vector<int> data_idxs, std::vector<int> parity_idxs,
+				std::vector<int> failure_idxs) override;
+
 		void encode_partial_blocks(
 				char **data_ptrs, char **coding_ptrs, int block_size,
 				const std::vector<int>& data_idxs, const std::vector<int>& parity_idxs,

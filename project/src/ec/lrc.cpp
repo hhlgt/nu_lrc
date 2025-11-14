@@ -5054,6 +5054,45 @@ void Non_Uni_LRC::group_size_adjustment(int real_l)
   }
 }
 
+void Non_Uni_LRC::encode_partial_blocks_local(
+				char **data_ptrs, char **coding_ptrs, int block_size,
+				std::vector<int> data_idxs, std::vector<int> parity_idxs,
+				std::vector<int> failure_idxs)
+{
+  my_assert((int)parity_idxs.size() == 1);
+  my_assert(parity_idxs[0] >= k + g);
+  int group_id = parity_idxs[0] - k - g;
+
+  if (groups_info.size() == 0) {
+    generate_groups_info();
+  }
+
+  int group_size = groups_info[group_id].size();
+  std::unordered_map<int, int> b2i;
+  for (auto i = 0; i < group_size; ++i) {
+    b2i[groups_info[group_id][i]] = i; 
+  }
+  auto it = b2i.find(parity_idxs[0]);
+  my_assert(it != b2i.end());
+  parity_idxs[0] = it->second;
+  for (size_t i = 0; i < failure_idxs.size(); ++i) {
+    it = b2i.find(failure_idxs[i]);
+    my_assert(it != b2i.end());
+    failure_idxs[i] = it->second;
+  }
+  for (size_t i = 0; i < data_idxs.size(); ++i) {
+    it = b2i.find(data_idxs[i]);
+    my_assert(it != b2i.end());
+    data_idxs[i] = it->second;
+  }
+  std::vector<int> group_matrix((group_size + 1) * (group_size + 1), 0);
+  get_identity_matrix(group_matrix.data(), group_size + 1, group_size + 1);
+  make_group_matrix(&(group_matrix.data())[group_size * (group_size + 1)], group_id);
+  encode_partial_blocks_for_failures_(group_size + 1, group_matrix.data(),
+                                      data_ptrs, coding_ptrs, block_size,
+                                      data_idxs, parity_idxs, failure_idxs);
+}
+
 void Non_Uni_LRC::encode_partial_blocks(
 				char **data_ptrs, char **coding_ptrs, int block_size,
 				const std::vector<int>& data_idxs, const std::vector<int>& parity_idxs,

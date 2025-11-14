@@ -327,7 +327,7 @@ namespace ECProject
               std::to_string(cluster_table_[parity_cluster_id].proxy_port);
           auto resp = async_simple::coro::syncAwait(proxies_[chosen_proxy]
                           ->call_for<&Proxy::main_recal>(
-                              std::chrono::seconds{0}, main_plan)).value();
+                              std::chrono::seconds{600}, main_plan)).value();
           lock_ptr->lock();
           computing_time += resp.computing_time;
           cross_cluster_time += resp.cross_cluster_time;
@@ -358,7 +358,7 @@ namespace ECProject
           std::string chosen_proxy = cluster_table_[cluster_id].proxy_ip +
               std::to_string(cluster_table_[cluster_id].proxy_port);
           async_simple::coro::syncAwait(proxies_[chosen_proxy]
-              ->call_for<&Proxy::help_recal>(std::chrono::seconds{0}, help_plan));
+              ->call_for<&Proxy::help_recal>(std::chrono::seconds{600}, help_plan));
           if (IF_DEBUG) {
             logger_lock_ptr->lock();
             std::string msg = "Send help plan to proxy " + chosen_proxy + "\n";
@@ -399,7 +399,7 @@ namespace ECProject
               std::to_string(cluster_table_[ran_cluster_id].proxy_port);
             auto resp = async_simple::coro::syncAwait(proxies_[chosen_proxy]
                           ->call_for<&Proxy::block_relocation>(
-                              std::chrono::seconds{0}, reloc_plan)).value();
+                              std::chrono::seconds{600}, reloc_plan)).value();
             cross_cluster_time += resp.cross_cluster_time;
           }
 
@@ -409,7 +409,7 @@ namespace ECProject
           std::string chosen_proxy = cluster_table_[del_cluster_id].proxy_ip +
               std::to_string(cluster_table_[del_cluster_id].proxy_port);
           async_simple::coro::syncAwait(proxies_[chosen_proxy]
-                ->call_for<&Proxy::delete_blocks>(std::chrono::seconds{0}, old_parities));
+                ->call_for<&Proxy::delete_blocks>(std::chrono::seconds{60}, old_parities));
         }
 
         gettimeofday(&m_start_time, NULL);
@@ -766,7 +766,7 @@ namespace ECProject
               std::to_string(cluster_table_[global_cluster_id].proxy_port);
           auto resp = async_simple::coro::syncAwait(proxies_[chosen_proxy]
                           ->call_for<&Proxy::main_recal>(
-                              std::chrono::seconds{0}, main_plan)).value();
+                              std::chrono::seconds{600}, main_plan)).value();
           lock_ptr->lock();
           computing_time += resp.computing_time;
           cross_cluster_time += resp.cross_cluster_time;
@@ -797,7 +797,7 @@ namespace ECProject
           std::string chosen_proxy = cluster_table_[cluster_id].proxy_ip +
               std::to_string(cluster_table_[cluster_id].proxy_port);
           async_simple::coro::syncAwait(proxies_[chosen_proxy]
-              ->call_for<&Proxy::help_recal>(std::chrono::seconds{0}, help_plan));
+              ->call_for<&Proxy::help_recal>(std::chrono::seconds{600}, help_plan));
           if (IF_DEBUG) {
             logger_lock_ptr->lock();
             std::string msg = "Send help plan to proxy " + chosen_proxy + "\n";
@@ -839,7 +839,7 @@ namespace ECProject
               std::to_string(cluster_table_[ran_cluster_id].proxy_port);
             auto resp = async_simple::coro::syncAwait(proxies_[chosen_proxy]
                           ->call_for<&Proxy::block_relocation>(
-                              std::chrono::seconds{0}, reloc_plan)).value();
+                              std::chrono::seconds{600}, reloc_plan)).value();
             cross_cluster_time += resp.cross_cluster_time;
           }
 
@@ -849,7 +849,7 @@ namespace ECProject
           std::string chosen_proxy = cluster_table_[del_cluster_id].proxy_ip +
               std::to_string(cluster_table_[del_cluster_id].proxy_port);
           async_simple::coro::syncAwait(proxies_[chosen_proxy]
-                ->call_for<&Proxy::delete_blocks>(std::chrono::seconds{0}, old_parities));
+                ->call_for<&Proxy::delete_blocks>(std::chrono::seconds{600}, old_parities));
         }
 
         gettimeofday(&m_start_time, NULL);
@@ -1401,7 +1401,7 @@ namespace ECProject
                 std::to_string(cluster_table_[parity_cluster_id].proxy_port);
             auto resp = async_simple::coro::syncAwait(proxies_[chosen_proxy]
                             ->call_for<&Proxy::main_recal>(
-                                std::chrono::seconds{0}, main_plan)).value();
+                                std::chrono::seconds{600}, main_plan)).value();
             lock_ptr->lock();
             computing_time += resp.computing_time;
             cross_cluster_time += resp.cross_cluster_time;
@@ -1434,7 +1434,7 @@ namespace ECProject
             std::string chosen_proxy = cluster_table_[cluster_id].proxy_ip +
                 std::to_string(cluster_table_[cluster_id].proxy_port);
             async_simple::coro::syncAwait(proxies_[chosen_proxy]
-                ->call_for<&Proxy::help_recal>(std::chrono::seconds{0}, help_plan));
+                ->call_for<&Proxy::help_recal>(std::chrono::seconds{600}, help_plan));
             if (IF_DEBUG) {
               logger_lock_ptr->lock();
               std::string msg = "Send help plan to proxy " + chosen_proxy + "\n";
@@ -1481,7 +1481,7 @@ namespace ECProject
               std::to_string(cluster_table_[ran_cluster_id].proxy_port);
             auto resp = async_simple::coro::syncAwait(proxies_[chosen_proxy]
                           ->call_for<&Proxy::block_relocation>(
-                              std::chrono::seconds{0}, reloc_plan)).value();
+                              std::chrono::seconds{600}, reloc_plan)).value();
             cross_cluster_time += resp.cross_cluster_time;
             io_cnt += 2 * (int)reloc_plan.blocks_to_move.size();
           }
@@ -1492,7 +1492,7 @@ namespace ECProject
           std::string chosen_proxy = cluster_table_[del_cluster_id].proxy_ip +
               std::to_string(cluster_table_[del_cluster_id].proxy_port);
           async_simple::coro::syncAwait(proxies_[chosen_proxy]
-                ->call_for<&Proxy::delete_blocks>(std::chrono::seconds{0}, old_parities));
+                ->call_for<&Proxy::delete_blocks>(std::chrono::seconds{60}, old_parities));
         }
         
         gettimeofday(&m_start_time, NULL);

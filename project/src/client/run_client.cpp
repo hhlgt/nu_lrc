@@ -1,4 +1,5 @@
 #include "client.h"
+#include <stdio.h>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>
@@ -539,7 +540,7 @@ void test_single_block_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 20;
+  int run_time = 5;
   int tot_cnt = 0;
   std::cout << "Single-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
@@ -626,6 +627,7 @@ void test_single_block_repair_lrc_periodically(Client &client,
           }
         }
       }
+      std::cout << cnt << " " << temp_repair <<  std::endl;
     }
     repair_times.push_back(temp_repair);
     decoding_times.push_back(temp_decoding);
@@ -678,7 +680,7 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 20;
+  int run_time = 10;
   int tot_cnt = 0;
   std::cout << "Two-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
