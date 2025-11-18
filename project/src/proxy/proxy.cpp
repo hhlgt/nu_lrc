@@ -180,7 +180,7 @@ namespace ECProject
           datanodes_[node_ip_port]->call<&Datanode::handle_get>(
               std::string(key), key_len, value_len));
       if (IF_DEBUG) {
-        std::string msg = "[Get] Call datanode to handle get " + std::string(key) + "\n";
+        std::string msg = "[Get] Call datanode " + node_ip_port + " to handle get " + std::string(key) + "\n";
         write_logs(Logger::LogLevel::INFO, msg);
       }
 

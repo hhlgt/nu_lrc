@@ -189,7 +189,8 @@ namespace ECProject
       for (auto& failure : pair.second) {
         msg += std::to_string(failure) + " ";
       }
-      msg += "} total = " + std::to_string(repair_time) + "s, latest = "
+      msg += "} in stripe " + std::to_string(stripe_id)
+                + " total = " + std::to_string(repair_time) + "s, latest = "
                 + std::to_string(temp_time) + "s. Decode: total = "
                 + std::to_string(decoding_time) + "\n";
       write_logs(Logger::LogLevel::INFO, msg);

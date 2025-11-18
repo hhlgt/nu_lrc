@@ -181,7 +181,7 @@ namespace ECProject {
       if (IF_DEBUG) {
         auto info = "Before scaling: " + old_ec->self_information()
                     +  "\nAfter scaling: " + lrc->self_information() + "\n";
-        write_logs(Logger::LogLevel::DEBUG, info);
+        write_logs(Logger::LogLevel::INFO, info);
         auto str = lrc->print_info(lrc->partition_plan, "partition");
         write_logs(Logger::LogLevel::DEBUG, str);
       }
@@ -197,6 +197,19 @@ namespace ECProject {
           vec.erase(std::remove_if(vec.begin(), vec.end(), [threshold](int val) {
               return val >= threshold;}), vec.end());
         }
+      }
+      if (IF_DEBUG) {
+        std::string msg = "Recalculation Plans:\n";
+        int idx = 0;
+        for (auto& plan : recalculation_plans) {
+          msg += std::to_string(idx) + ": ";
+          for (auto num : plan) {
+            msg += std::to_string(num) + " ";
+          }
+          msg += "\n";
+          ++idx;
+        }
+        write_logs(Logger::LogLevel::INFO, msg);
       }
 
       // generate new placement info
@@ -249,6 +262,15 @@ namespace ECProject {
         old_parities_cluster_set.insert(t_node.map2cluster);
       }
 
+      if (IF_DEBUG) {
+        std::string msg = "Delete old local parirties: ";
+        for (auto i : old_locals) {
+          msg += std::to_string(i) + "[" + std::to_string(stripe.block_ids[i]) + "] ";
+        }
+        msg += "\n";
+        write_logs(Logger::LogLevel::INFO, msg);
+      }
+
       // info for recalculation local parity blocks parallelly
       MainRecalPlan main_plan;
       int group_num = (int)recalculation_plans.size();
@@ -295,6 +317,27 @@ namespace ECProject {
         main_plans[i].new_locations.push_back(
             std::make_pair(lid, std::make_pair(t_node.node_ip, t_node.node_port)));
         main_plans[i].new_parity_block_ids.push_back(new_block_ids[lid]);
+      }
+      if (IF_DEBUG) {
+        std::string msg = "Calculate new local parirties: ";
+        for (int i = 0; i < group_num; i++) {
+          int lid = lrc->k + lrc->g + i;
+          msg += std::to_string(lid) + "[" + std::to_string(new_block_ids[lid]) + "] ";
+        }
+        msg += "\n";
+        write_logs(Logger::LogLevel::INFO, msg);
+      }
+      if (IF_DEBUG) {
+        std::string msg = "\nOld placement: ";
+        for (auto i = 0; i < old_stripe_wide; ++i) {
+          msg += std::to_string(stripe.block_ids[i]) + "[" + std::to_string(stripe.blocks2nodes[i]) + "] ";
+        }
+        msg += "\nNew placement: ";
+        for (auto i = 0; i < new_stripe_wide; ++i) {
+          msg += std::to_string(new_block_ids[i]) + "[" + std::to_string(new_placement_info[i]) + "] ";
+        }
+        msg += "\n";
+        write_logs(Logger::LogLevel::INFO, msg);
       }
 
       // info for block relocation
@@ -498,10 +541,9 @@ namespace ECProject {
       double temp_time = end_time.tv_sec - start_time.tv_sec +
           (end_time.tv_usec - start_time.tv_usec) * 1.0 / 1000000;
       scaling_time += temp_time;
-      std::string msg = "[Scaling] Process " + std::to_string(stripe_cnt + 1) 
-                          + "/" + std::to_string(stripe_num) + " total_time:"
-                          + std::to_string(scaling_time) + " latest:"
-                          + std::to_string(temp_time) + "\n";
+      std::string msg = "[Scaling] Stripe " + std::to_string(stripe.stripe_id) 
+                        + " total_time:" + std::to_string(scaling_time) + " latest:"
+                        + std::to_string(temp_time) + "\n";
       write_logs(Logger::LogLevel::INFO, msg);
       stripe_cnt++;
     }
@@ -563,7 +605,8 @@ namespace ECProject {
       }
     }
     gid = 0;
-    for (int i = 0; i < (int)new_lrc->krs.size(); ++i) {
+    int tplus1 = new_lrc->krs.size();
+    for (int i = 0; i < tplus1; ++i) {
       int new_ki = new_lrc->krs[i].first;
       int new_ri = new_lrc->krs[i].second;
       int old_ri = old_lrc->krs[i].second;
@@ -571,7 +614,11 @@ namespace ECProject {
         continue;
       }
       if (new_ri >= old_ri) {
-        for (int j = 0; j < new_ki / new_ri; ++j) {
+        int gni = new_ki / new_ri;
+        if (i == tplus1 - 1 && new_ki % new_ri != 0) {
+          ++gni;
+        }
+        for (int j = 0; j < gni; ++j) {
           plans.emplace_back(std::vector<int>());
           auto new_group = std::unordered_set<int>(new_groups[gid].begin(),
               new_groups[gid].end());
@@ -593,7 +640,11 @@ namespace ECProject {
           gid++;
         }
       } else {
-        for (int j = 0; j < new_ki / new_ri; ++j) {
+        int gni = new_ki / new_ri;
+        if (i == tplus1 - 1 && new_ki % new_ri != 0) {
+          ++gni;
+        }
+        for (int j = 0; j < gni; ++j) {
           if (new_ri > old_ri / 2) {
             plans.emplace_back(std::vector<int>());
             auto new_group = std::unordered_set<int>(new_groups[gid].begin(),
@@ -616,20 +667,21 @@ namespace ECProject {
               }
             }
             if (!flag) {
-              auto it = std::find(new_groups[gid].begin(), new_groups[gid].end(),
-                  k + g + gid);
-              if (it != new_groups[gid].end()) {
-                new_groups[gid].erase(it);
+              for (auto num : new_groups[gid]) {
+                if (num != k + g + gid) {
+                  plans[gid].emplace_back(num);
+                }
               }
-              plans.push_back(new_groups[gid++]);
             }
+            ++gid;
           } else {
-            auto it = std::find(new_groups[gid].begin(), new_groups[gid].end(),
-                k + g + gid);
-            if (it != new_groups[gid].end()) {
-              new_groups[gid].erase(it);
+            plans.emplace_back(std::vector<int>());
+            for (auto num : new_groups[gid]) {
+              if (num != k + g + gid) {
+                plans[gid].emplace_back(num);
+              }
             }
-            plans.push_back(new_groups[gid++]);
+            ++gid;
           }
         }
       }

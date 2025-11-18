@@ -575,6 +575,9 @@ void test_single_block_repair_lrc_periodically(Client &client,
         int obj_len = object_sizes[ii] / block_size;
         upperbound += obj_len;
         for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
+          int ran_num = random_index(100);
+          if (ran_num < 20) {
+          
           int ran_fblock_id = random_index(k);  // each data block has the same probability of being failed
           if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
             std::vector<unsigned int> failures;
@@ -589,6 +592,8 @@ void test_single_block_repair_lrc_periodically(Client &client,
               temp_io_cnt += resp.io_cnt;
               cnt++;
             }
+          }
+          
           }
         }
         
@@ -627,7 +632,6 @@ void test_single_block_repair_lrc_periodically(Client &client,
           }
         }
       }
-      std::cout << cnt << " " << temp_repair <<  std::endl;
     }
     repair_times.push_back(temp_repair);
     decoding_times.push_back(temp_decoding);
@@ -680,7 +684,7 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
   std::vector<double> meta_times;
   std::vector<int> cross_cluster_transfers;
   std::vector<int> io_cnts;
-  int run_time = 10;
+  int run_time = 5;
   int tot_cnt = 0;
   std::cout << "Two-Block Repair:" << std::endl;
   for (int i = 0; i < run_time; i++) {
@@ -722,6 +726,9 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
         int file_len = object_sizes[ii] / block_size;
         upperbound += file_len;
         for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
+          int ran_num = random_index(100);
+          if (ran_num < 20) {
+          
           std::vector<int> ran_fblock_ids;
           random_n_num(0, k - 1, 2, ran_fblock_ids);
           bool flag = false;
@@ -746,6 +753,8 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
               temp_io_cnt += resp.io_cnt;
               cnt++;
             }
+          }
+
           }
         }
         lowerbound += file_len;
@@ -817,35 +826,124 @@ struct WorkFlows
   std::vector<int> ms_g;
 };
 
-void generate_workflows(WorkFlows& workflows, size_t block_size, std::string tracefile_path,
-    const ScaleParameters& scale_paras)
+void save_workflows_to_file(const std::string& file_path, size_t block_size,
+        const WorkFlows& workflows)
 {
-  workflows.ms_object_accessrates.resize(scale_paras.test_time + 1);
-  parse_tracefile(tracefile_path, block_size, workflows.ms_storge_overhead, workflows.ms_g,
-      workflows.ms_object_sizes, workflows.ms_object_accessrates[0]);
-  for (int i = 1; i <= scale_paras.test_time; i++) {
-    workflows.ms_object_accessrates[i] = workflows.ms_object_accessrates[i - 1];
-    double change_rate = scale_paras.change_rate;
-    for (auto& object_accessrates : workflows.ms_object_accessrates[i]) {
-      for (auto& accessrate : object_accessrates) {
-        if (rand() / double(RAND_MAX) < change_rate) {
-          double randomFactor = 1.0 + ((rand() % 201 - 100) / 100.0);
-          accessrate = static_cast<unsigned int>(accessrate * randomFactor);
-          if (accessrate == 0) accessrate = 1;
+  std::ofstream outfile(file_path);
+  if (!outfile.is_open()) {
+    std::cerr << "Failed to open output file: " << file_path << std::endl;
+    return;
+  }
+  for (size_t time_point = 0; time_point < workflows.ms_object_accessrates.size(); ++time_point) {
+    for (size_t stripe_idx = 0; stripe_idx < workflows.ms_object_sizes.size(); ++stripe_idx) {
+      outfile << time_point << "," 
+              << workflows.ms_storge_overhead[stripe_idx] << "," 
+              << workflows.ms_g[stripe_idx];
+
+      const auto& sizes = workflows.ms_object_sizes[stripe_idx];
+      const auto& access_rates = workflows.ms_object_accessrates[time_point][stripe_idx];
+            
+      for (size_t obj_idx = 0; obj_idx < sizes.size(); ++obj_idx) {
+        outfile << ",(" << sizes[obj_idx] / block_size << "," << access_rates[obj_idx] << ")";
+      }
+      outfile << std::endl;
+    }
+  }
+  outfile.close();
+}
+
+void parse_tracefile_workflows(std::string tracefile_path, size_t block_size,
+                     WorkFlows& workflows)
+{
+  std::ifstream file(tracefile_path);
+  if (file.is_open()) {
+    std::string line;
+    while (std::getline(file, line)) {
+      std::vector<size_t> object_sizes;
+      std::vector<unsigned int> object_accessrates;
+      std::regex pattern1("(\\d+),(\\d+\\.\\d+),(\\d+)");
+      std::sregex_iterator it1(line.begin(), line.end(), pattern1);
+      std::sregex_iterator end1;
+      int time_point = 0;
+      while (it1 != end1) {
+        std::smatch match = *it1;
+        time_point = std::stoi(match[1].str());
+        if (time_point == 0) {
+          workflows.ms_storge_overhead.emplace_back(std::stof(match[2].str()));
+          workflows.ms_g.emplace_back(std::stoi(match[3].str()));
+        }
+        ++it1;
+      }
+      std::regex pattern2("\\((\\d+),(\\d+)\\)");
+      std::sregex_iterator it2(line.begin(), line.end(), pattern2);
+      std::sregex_iterator end2;
+      while (it2 != end2) {
+        std::smatch match = *it2;
+        object_sizes.emplace_back((size_t)(std::stoi(match[1].str()) * block_size));
+        object_accessrates.emplace_back((unsigned int)std::stoi(match[2].str()));
+        ++it2;
+      }
+      if (time_point == 0) {
+        workflows.ms_object_sizes.emplace_back(object_sizes);
+      }
+      if (time_point == workflows.ms_object_accessrates.size()) {
+        workflows.ms_object_accessrates.resize(time_point + 1);
+      }
+      workflows.ms_object_accessrates[time_point].emplace_back(object_accessrates);
+    }
+    file.close();
+  } else {
+    std::cerr << "Failed to open the file." << std::endl;
+  }
+}
+
+void generate_workflows(WorkFlows& workflows, size_t block_size, std::string tracefile_path,
+    const ScaleParameters& scale_paras, bool from_file = false)
+{
+  std::string save_file_path;
+  size_t last_dot_pos = tracefile_path.find_last_of(".");
+  size_t last_slash_pos = tracefile_path.find_last_of("/");
+  size_t last_backslash_pos = tracefile_path.find_last_of("\\");
+  size_t last_path_separator = std::max(last_slash_pos, last_backslash_pos);
+  if (last_dot_pos == std::string::npos || last_dot_pos < last_path_separator) {
+    save_file_path = tracefile_path.substr(0, last_dot_pos) + "_workflows" + ".txt";
+  } else {
+    save_file_path = tracefile_path.substr(0, last_dot_pos) + "_workflow" + tracefile_path.substr(last_dot_pos);
+  }
+
+  if (!from_file) {
+    workflows.ms_object_accessrates.resize(scale_paras.test_time + 1);
+    parse_tracefile(tracefile_path, block_size, workflows.ms_storge_overhead, workflows.ms_g,
+        workflows.ms_object_sizes, workflows.ms_object_accessrates[0]);
+    for (int i = 1; i <= scale_paras.test_time; i++) {
+      workflows.ms_object_accessrates[i] = workflows.ms_object_accessrates[i - 1];
+      double change_rate = scale_paras.change_rate;
+      for (auto& object_accessrates : workflows.ms_object_accessrates[i]) {
+        for (auto& accessrate : object_accessrates) {
+          if (rand() / double(RAND_MAX) < change_rate) {
+            double randomFactor = 1.0 + ((rand() % 201 - 100) / 100.0);
+            accessrate = static_cast<unsigned int>(accessrate * randomFactor);
+            if (accessrate == 0) accessrate = 1;
+          }
         }
       }
     }
+    save_workflows_to_file(save_file_path, block_size, workflows);
+  } else {
+    parse_tracefile_workflows(save_file_path, block_size, workflows);
+    my_assert(workflows.ms_object_accessrates.size() == scale_paras.test_time + 1);
   }
 }
 
 void test_repair_performance_periodically_v2(
     std::string path_prefix, std::string tracefile,
     int stripe_num, ParametersInfo& paras,
-    ScaleParameters& scale_paras, int failed_num)
+    ScaleParameters& scale_paras, int failed_num,
+    bool from_file = false, int startcase = 0)
 {
   std::string tracefile_path = path_prefix + "/../../tracefile/" + tracefile;
   WorkFlows wfs;
-  generate_workflows(wfs, paras.block_size, tracefile_path, scale_paras);
+  generate_workflows(wfs, paras.block_size, tracefile_path, scale_paras, from_file);
   Client client("0.0.0.0", CLIENT_PORT, "0.0.0.0", COORDINATOR_PORT);
 
   // generate key-value pair
@@ -861,8 +959,9 @@ void test_repair_performance_periodically_v2(
     ms_object_keys.emplace_back(object_keys);
   }
   bool dynamic = true;
+  int t = startcase;
 
-  for (int t = 0; t < 4; ++t) {
+  for (; t < 4; ++t) {
     if (t == 1) {
       scale_paras.optimized_recal = false;
     } else if (t == 2) {
@@ -1126,8 +1225,8 @@ void test_repair_performance_periodically(
 
 int main(int argc, char **argv)
 {
-  if (argc != 5) {
-    std::cout << "./run_client config_file tracefile stripe_num failed_num" << std::endl;
+  if (argc < 5) {
+    std::cout << "./run_client config_file tracefile stripe_num failed_num [startcase] [from_file]" << std::endl;
     exit(0);
   }
 
@@ -1144,13 +1243,22 @@ int main(int argc, char **argv)
 
   int failed_num = std::stoi(argv[4]);
   my_assert(0 <= failed_num && failed_num <= 2);
+  int startcase = 0;
+  bool from_file = false;
+  if (argc == 7) {
+    startcase = std::stoi(argv[5]);
+    from_file = std::string(argv[6]) == "true";
+  }
   
   ParametersInfo paras2 = paras;
   ScaleParameters scale_paras2 = scale_paras;
   // test_repair_performance_periodically(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num);
-  test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num);
+  if (startcase < 4) {
+    test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras, scale_paras, failed_num, from_file, startcase);
+  }
+  startcase %= 4;
   paras2.placement_rule = PlacementRule::OPTIMAL;
-  test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras2, scale_paras2, failed_num);
+  test_repair_performance_periodically_v2(path_prefix, tracefile, stripe_num, paras2, scale_paras2, failed_num, true, startcase);
 
   return 0;
 }
