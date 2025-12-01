@@ -98,7 +98,7 @@ namespace ECProject {
       new_hotness += new_avg;
       old_so += stripe.ec->storage_overhead;
       if (flag) {
-        int new_l = int((new_avg * (float)lrc->l) / old_avg);
+        int new_l = int(round((new_avg * (float)lrc->l) / old_avg));
         float new_storage_overhead = 
             std::min((float)(lrc->k + lrc->g + new_l) / (float)lrc->k, storage_overhead_upper);
         stripe.ec->storage_overhead = new_storage_overhead;
@@ -353,6 +353,15 @@ namespace ECProject {
           des_nodes.push_back(des_node_id);
         }
       }
+      for (auto& kv : new2old) {  // reusable local parities
+        int src_node_id = old_placement_info[kv.second];
+        int des_node_id = new_placement_info[kv.first];
+        if (src_node_id != des_node_id) {
+          blocks_to_move.push_back(stripe.block_ids[kv.second]);
+          src_nodes.push_back(src_node_id);
+          des_nodes.push_back(des_node_id);
+        }
+      }
       RelocatePlan reloc_plan;
       reloc_plan.block_size = block_size;
       int move_num = (int)blocks_to_move.size();
@@ -385,6 +394,10 @@ namespace ECProject {
           (m_end_time.tv_usec - m_start_time.tv_usec) / 1000000;
 
       for (int i = 0; i < group_num; i++) {
+        if (recalculation_plans[i].size() == 1 &&
+            recalculation_plans[i][0] >= lrc->k + lrc->g) { // only metadata update needed
+          continue;
+        }
         auto& main_plan = main_plans[i];
         unsigned int parity_cluster_id = main_cluster_ids[i];
         main_plan.ec_type = ec_schema_.ec_type;
@@ -560,7 +573,7 @@ namespace ECProject {
         msg += kv.second.ec->self_information() + "\n";
         for (auto& key : kv.second.objects) {
           ObjectInfo& obj = commited_object_table_[key];
-          msg += key + "[" + std::to_string(obj.value_len) + "," + std::to_string(obj.access_rate) + "] ";
+          msg += key + "[" + std::to_string(obj.value_len / ec_schema_.block_size) + "," + std::to_string(obj.access_rate) + "] ";
         }
         msg += "\n";
         write_logs(Logger::LogLevel::INFO, msg);

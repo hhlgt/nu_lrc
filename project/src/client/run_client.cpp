@@ -920,8 +920,10 @@ void generate_workflows(WorkFlows& workflows, size_t block_size, std::string tra
       double change_rate = scale_paras.change_rate;
       for (auto& object_accessrates : workflows.ms_object_accessrates[i]) {
         for (auto& accessrate : object_accessrates) {
-          if (rand() / double(RAND_MAX) < change_rate) {
-            double randomFactor = 1.0 + ((rand() % 201 - 100) / 100.0);
+          int ran_1000 = random_index(1000);
+          if (double(ran_1000) / 1000.0 < change_rate) {
+            int ran_200 = random_index(200);
+            double randomFactor = 1.0 + ((ran_200 - 100) / 100.0);
             accessrate = static_cast<unsigned int>(accessrate * randomFactor);
             if (accessrate == 0) accessrate = 1;
           }
@@ -1037,14 +1039,19 @@ void test_repair_performance_periodically_v2(
     int test_time = scale_paras.test_time;
     srand(time(NULL));
 
-    for (int tt = 0; tt < test_time; tt++) {
-      // test repair
-      if (failed_num == 1) {
-        test_single_block_repair_lrc_periodically(client, wfs.ms_object_sizes,
-            wfs.ms_object_accessrates[tt], wfs.ms_storge_overhead, wfs.ms_g, paras.block_size);
-      } else if (failed_num == 2) {
-        test_multi_blocks_repair_lrc_periodically(client, wfs.ms_object_sizes,
-            wfs.ms_object_accessrates[tt], wfs.ms_storge_overhead, wfs.ms_g, paras.block_size);
+    for (int tt = 0; tt < test_time + 1; tt++) {
+      if (tt <= test_time) {
+        // test repair
+        if (failed_num == 1) {
+          test_single_block_repair_lrc_periodically(client, wfs.ms_object_sizes,
+              wfs.ms_object_accessrates[tt], wfs.ms_storge_overhead, wfs.ms_g, paras.block_size);
+        } else if (failed_num == 2) {
+          test_multi_blocks_repair_lrc_periodically(client, wfs.ms_object_sizes,
+              wfs.ms_object_accessrates[tt], wfs.ms_storge_overhead, wfs.ms_g, paras.block_size);
+        }
+        if (tt == test_time) {
+          break;
+        }
       }
 
       client.update_hotness(wfs.ms_object_accessrates[tt + 1]);
