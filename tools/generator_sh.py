@@ -2,12 +2,12 @@ import os
 
 current_path = os.getcwd()
 parent_path = os.path.dirname(current_path)
-cluster_number = 15
+cluster_number = 40
 datanode_number_per_cluster = 10
 datanode_port_start = 17600
 cluster_id_start = 0
-iftest = True
-vc_per_pc = 1
+iftest = False
+vc_per_pc = 4
 ifredis = False
 ifmemcached = False
 
@@ -190,7 +190,7 @@ def cluster_generate_run_datanode_file(i, bias=1000):
         f.write("\n")
         for j in range(i * vc_per_pc, (i + 1) * vc_per_pc):
             for each_datanode in cluster_informtion[j]["datanode"]:
-                f.write("./project/build/run_datanode "+"0.0.0.0"+" "+str(each_datanode[1])+"\n")
+                f.write("./project/build/run_datanode "+str(each_datanode[0])+" "+str(each_datanode[1])+"\n")
             f.write("\n") 
 
 def cluster_generate_run_proxy_file(i):
@@ -203,7 +203,7 @@ def cluster_generate_run_proxy_file(i):
         ip = proxy_ip_list[i][0]
         port = proxy_ip_list[i][1]
         for j in range(i * vc_per_pc, (i + 1) * vc_per_pc):
-            f.write("./project/build/run_proxy "+"0.0.0.0"+" "+str(port)+" "+networkcore_address+"\n")   
+            f.write("./project/build/run_proxy "+ip+" "+str(port)+" "+networkcore_address+"\n")   
             f.write("\n")
             port += 7
 
@@ -216,7 +216,7 @@ def cluster_generate_run_datanode_file(i):
         f.write("\n")
         for j in range(i * vc_per_pc, (i + 1) * vc_per_pc):
             for each_datanode in cluster_informtion[j]["datanode"]:
-                f.write("./project/build/run_datanode "+"0.0.0.0"+" "+str(each_datanode[1])+"\n")
+                f.write("./project/build/run_datanode "+str(each_datanode[0])+" "+str(each_datanode[1])+"\n")
             f.write("\n") 
 
 def cluster_generate_run_redis_file(i, bias=1000):
