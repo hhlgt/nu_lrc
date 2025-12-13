@@ -132,6 +132,13 @@ void LocallyRepairableCode::encode_partial_blocks(
           if (idx < k || idx == parity_idxs[i]) {
             flag = true;
             break;
+          } else if (idx >= k && idx < k + g) {
+            int gid = bid2gid(idx);
+            auto it = std::find(data_idxs.begin(), data_idxs.end(), k + g + gid);
+            if (it == data_idxs.end()) {
+              flag = true;
+              break;
+            }
           }
         }
       } else {
@@ -216,11 +223,18 @@ int LocallyRepairableCode::num_of_partial_blocks_to_transfer(
     bool flag = false;
     if (parity_idxs[i] < k + g) {
       for (auto idx : data_idxs) {
-        // if (idx < k || idx == parity_idxs[i]) {
-        if (idx < k + g) {
+        if (idx < k || idx == parity_idxs[i]) {
           flag = true;
           break;
+        } else if (idx >= k && idx < k + g) { // use global parity to repair another failed global parity
+          int gid = bid2gid(idx);
+          auto it = std::find(data_idxs.begin(), data_idxs.end(), k + g + gid);
+          if (it == data_idxs.end()) {
+            flag = true;
+            break;
+          }
         }
+
       }
     } else {
       int gid = bid2gid(parity_idxs[i]);
@@ -5128,16 +5142,23 @@ void Non_Uni_LRC::encode_partial_blocks(
       bool flag = false;
       if (parity_idxs[i] < k + g) {
         for (auto idx : data_idxs) {
-          if (idx < k || idx >= k + g || idx == parity_idxs[i]) {
+          if (idx < k || idx == parity_idxs[i]) {
             flag = true;
             break;
+          } else if (idx >= k && idx < k + g) {
+            int gid = bid2gid(idx);
+            auto it = std::find(data_idxs.begin(), data_idxs.end(), k + g + gid);
+            if (it == data_idxs.end()) {
+              flag = true;
+              break;
+            }
           }
         }
       } else {
         int gid = bid2gid(parity_idxs[i]);
         for (auto idx : data_idxs) {
           int t_gid = bid2gid(idx);
-          if (t_gid == gid || (idx >= k && idx < k + g) || idx == parity_idxs[i]) {
+          if (t_gid == gid || idx == parity_idxs[i]) {
             flag = true;
             break;
           }

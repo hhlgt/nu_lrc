@@ -466,7 +466,8 @@ namespace ECProject
 
     if (t_flag) {
       if (IF_DEBUG) {
-        std::string msg = "[Helper] partial encoding with blocks {";
+        std::string msg = "[Helper] " + ec->self_information();
+        msg += " partial encoding with blocks { ";
         for (auto it = original_blocks_idx_ptr->begin();
              it != original_blocks_idx_ptr->end(); it++) {
           msg += std::to_string(*it) + " ";
@@ -508,6 +509,12 @@ namespace ECProject
         if (partial_flags[j]) {
           num_of_partial_blocks++;
         }
+      }
+
+      if (IF_DEBUG) {
+        std::string msg = "[Helper] num_of_partial_blocks = ";
+        msg += std::to_string(num_of_partial_blocks) + "\n";
+        write_logs(Logger::LogLevel::INFO, msg);
       }
       my_assert(num_of_partial_blocks < num_of_original_blocks);
 

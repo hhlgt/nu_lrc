@@ -310,12 +310,11 @@ void test_stripe_merging(Client &client, int step_size)
 }
 
 void generate_random_multi_block_failures_lrc(std::string filename,
-    int stripe_num, const ParametersInfo& paras, int failed_num)
+    int stripe_num, const ParametersInfo& paras, int failed_num,
+    const std::vector<std::vector<size_t>> &ms_object_sizes,
+    const std::vector<std::vector<unsigned int>> &ms_object_accessrates)
 {
   LocallyRepairableCode* lrc = lrc_factory(paras.ec_type, paras.cp);
-  std::vector<std::vector<int>> groups;
-  lrc->grouping_information(groups);
-  int group_num = (int)groups.size();
   std::string suf = lrc->type() + "_" + std::to_string(paras.cp.k) + "_" + \
       std::to_string(paras.cp.l) + "_" + std::to_string(paras.cp.g) + "_" + \
       std::to_string(failed_num);
@@ -326,55 +325,81 @@ void generate_random_multi_block_failures_lrc(std::string filename,
     return;
   }
   int cases_per_stripe = 10;
-  for (int i = 0; i < cases_per_stripe * stripe_num; i++) {
-    int ran_data_idx = random_index((size_t)(lrc->k + lrc->g));
-    int gid = ran_data_idx / lrc->r;
-    std::vector<int> failed_blocks;
-    random_n_element(2, groups[gid], failed_blocks);
-    if (failed_num > 2) {
-      int t_gid = random_index((size_t)group_num);
-      int t_idx = random_index(groups[t_gid].size());
-      int failed_idx = groups[t_gid][t_idx];
-      while (std::find(failed_blocks.begin(), failed_blocks.end(), failed_idx)
-          != failed_blocks.end()) {
-        t_gid = random_index((size_t)group_num);
-        t_idx = random_index(groups[t_gid].size());
-        failed_idx = groups[t_gid][t_idx];
+  for (int i = 0; i < stripe_num; i++) {
+    auto nu_lrc = dynamic_cast<Non_Uni_LRC*>(lrc);
+    nu_lrc->storage_overhead = float(paras.cp.k + paras.cp.g + paras.cp.l) / float(paras.cp.k);
+    nu_lrc->generate_coding_parameters_for_a_stripe(ms_object_sizes[i], ms_object_accessrates[i], paras.block_size);
+    std::vector<std::vector<int>> groups;
+    nu_lrc->generate_groups_info();
+    nu_lrc->grouping_information(groups);
+    int group_num = (int)groups.size();
+    std::cout << nu_lrc->self_information() << std::endl;
+    for (auto& group : groups) {
+      for (auto bid : group) {
+        std::cout << bid << " ";
       }
-      failed_blocks.push_back(failed_idx);
-      if (failed_num > 3) {
-        int tt_gid = 0;
-        if (gid == t_gid && paras.cp.g < 3) {
-          tt_gid = (gid + random_index((size_t)(group_num - 1)) + 1) % group_num;
-        } else {
-          tt_gid = random_index((size_t)group_num);
-        }
-        t_idx = random_index(groups[tt_gid].size());
-        failed_idx = groups[tt_gid][t_idx];
+      std::cout << "\n";
+    }
+    for (int ii = 0; ii < cases_per_stripe; ii++) {
+      // int ran_data_idx = random_index((size_t)(lrc->k + lrc->g));
+      // int gid = lrc->bid2gid(ran_data_idx);
+      int gid = random_index(group_num);
+      std::vector<int> failed_blocks;
+      random_n_element(2, groups[gid], failed_blocks);
+      if (failed_num > 2) {
+        int t_gid = random_index((size_t)group_num);
+        int t_idx = random_index(groups[t_gid].size());
+        int failed_idx = groups[t_gid][t_idx];
         while (std::find(failed_blocks.begin(), failed_blocks.end(), failed_idx)
-          != failed_blocks.end()) {
+            != failed_blocks.end()) {
+          t_gid = random_index((size_t)group_num);
+          t_idx = random_index(groups[t_gid].size());
+          failed_idx = groups[t_gid][t_idx];
+        }
+        failed_blocks.push_back(failed_idx);
+        if (failed_num > 3) {
+          int tt_gid = 0;
           if (gid == t_gid && paras.cp.g < 3) {
             tt_gid = (gid + random_index((size_t)(group_num - 1)) + 1) % group_num;
           } else {
             tt_gid = random_index((size_t)group_num);
           }
+          my_assert(tt_gid < group_num);
           t_idx = random_index(groups[tt_gid].size());
+          my_assert(t_idx < groups[tt_gid].size());
           failed_idx = groups[tt_gid][t_idx];
+          while (std::find(failed_blocks.begin(), failed_blocks.end(), failed_idx)
+            != failed_blocks.end()) {
+            if (gid == t_gid && paras.cp.g < 3) {
+              tt_gid = (gid + random_index((size_t)(group_num - 1)) + 1) % group_num;
+            } else {
+              tt_gid = random_index((size_t)group_num);
+            }
+            my_assert(tt_gid < group_num);
+            t_idx = random_index(groups[tt_gid].size());
+            my_assert(t_idx < groups[tt_gid].size());
+            failed_idx = groups[tt_gid][t_idx];
+          }
+          failed_blocks.push_back(failed_idx);
         }
-        failed_blocks.push_back(failed_idx);
       }
-    }
-    if (!lrc->check_if_decodable(failed_blocks)) {
-      i--;
-      continue;
-    } else {
-      for (const auto& num : failed_blocks) {
-        outFile << num << " ";
+      if (!nu_lrc->check_if_decodable(failed_blocks)) {
+        ii--;
+        continue;
+      } else {
+        outFile << i << " ";
+        for (const auto& num : failed_blocks) {
+          outFile << num << " ";
+        }
+        outFile << "\n";
       }
-      outFile << "\n";
     }
   }
   outFile.close();
+  if (lrc != nullptr) {
+    delete lrc;
+    lrc = nullptr;
+  }
 }
 
 void test_multiple_blocks_repair_lrc_with_testcases(std::string filename,
@@ -405,9 +430,7 @@ void test_multiple_blocks_repair_lrc_with_testcases(std::string filename,
   }
   std::string line;
   std::cout << "Multi-Block Repair:" << std::endl;
-  int ii = 0;
-  int test_stripe_num = 5;
-  for (int i = 0; i < test_stripe_num; i++) {
+  for (int i = 0; i < stripe_num; i++) {
     std::cout << "[Stripe " << i << "]" << std::endl;
     double temp_repair = 0;
     double temp_decoding = 0;
@@ -420,18 +443,17 @@ void test_multiple_blocks_repair_lrc_with_testcases(std::string filename,
       std::vector<int> failed_blocks;
       std::getline(inFile, line);
       std::istringstream lineStream(line);
+      int sid;
+      lineStream >> sid;
       int num;
       while (lineStream >> num) {
         failed_blocks.push_back(num);
-      }
-      if (i < test_stripe_num - stripe_num) {
-        continue;
       }
       std::vector<unsigned int> failures;
       for (auto& block : failed_blocks) {
         failures.push_back((unsigned int)block);
       }
-      auto resp = client.blocks_repair(failures, stripe_ids[ii]);
+      auto resp = client.blocks_repair(failures, sid);
       if (resp.success) {
         temp_repair += resp.repair_time;
         temp_decoding += resp.decoding_time;
@@ -442,10 +464,6 @@ void test_multiple_blocks_repair_lrc_with_testcases(std::string filename,
         cnt++;
       }
     }
-    if (i < test_stripe_num - stripe_num) {
-      continue;
-    }
-    ii++;
     repair_times.push_back(temp_repair);
     decoding_times.push_back(temp_decoding);
     cross_cluster_times.push_back(temp_cross_cluster);
@@ -575,8 +593,8 @@ void test_single_block_repair_lrc_periodically(Client &client,
         int obj_len = object_sizes[ii] / block_size;
         upperbound += obj_len;
         for(int jj = 0; jj < object_accessrates[ii]; jj++) { // proportion to access frequency
-          int ran_num = random_index(100);
-          if (ran_num < 20) {
+          // int ran_num = random_index(100);
+          // if (ran_num < 20) {
           
           int ran_fblock_id = random_index(k);  // each data block has the same probability of being failed
           if(ran_fblock_id >= lowerbound && ran_fblock_id < upperbound) {// a block in requested file failed
@@ -594,7 +612,7 @@ void test_single_block_repair_lrc_periodically(Client &client,
             }
           }
           
-          }
+          // }
         }
         
         // int ar = object_accessrates[ii];
@@ -741,7 +759,9 @@ void test_multi_blocks_repair_lrc_periodically(Client &client,
           if(flag) {// a block in requested file failed 
             std::vector<unsigned int> failures;
             for (auto& id : ran_fblock_ids) {
-              failures.push_back((unsigned int)id); 
+              if (id >= lowerbound && id < upperbound) {
+                failures.push_back((unsigned int)id); 
+              }
             }
             auto resp = client.blocks_repair(failures, sid);
             if (resp.success) {
@@ -1230,6 +1250,120 @@ void test_repair_performance_periodically(
   client.delete_all_stripes();
 }
 
+void test_multi_blocks_repair_performance(
+    std::string path_prefix, std::string tracefile,
+    int stripe_num, ParametersInfo& paras,
+    int failed_num, int startcase = 0)
+{
+  std::vector<std::vector<size_t>> ms_object_sizes;
+  std::vector<std::vector<unsigned int>> ms_object_accessrates;
+  std::vector<float> ms_storge_overhead;
+  std::vector<int> ms_g;
+  std::string tracefile_path = path_prefix + "/../../tracefile/" + tracefile;
+  parse_tracefile(tracefile_path, paras.block_size, ms_storge_overhead, ms_g, ms_object_sizes, ms_object_accessrates);
+
+  std::string failures_file_path = path_prefix + "/../../testcase/";
+  // generate_random_multi_block_failures_lrc(failures_file_path, stripe_num, paras, failed_num, ms_object_sizes, ms_object_accessrates);
+  // return;
+
+  Client client("0.0.0.0", CLIENT_PORT, "0.0.0.0", COORDINATOR_PORT);
+
+  // generate key-value pair
+  std::vector<size_t> value_lengths(stripe_num, 0);
+  std::vector<std::vector<std::string>> ms_object_keys;
+  int obj_id = 0;
+  for (int i = 0; i < stripe_num; i++) {
+    std::vector<std::string> object_keys;
+    for (auto& size : ms_object_sizes[i]) {
+      value_lengths[i] += size;
+      object_keys.emplace_back("obj" + std::to_string(obj_id++));
+    }
+    ms_object_keys.emplace_back(object_keys);
+  }
+  int t = startcase;
+
+  for (; t < 4; ++t) {
+    if (t == 1) {
+      paras.repair_priority = true;
+    } else if (t == 2) {
+      paras.repair_priority = true;
+      paras.partial_scheme = true;
+    } else if (t == 3) {
+      paras.repair_priority = true;
+      paras.partial_scheme = true;
+      paras.partial_decoding = false;
+    } 
+
+    print_ec_info(nullptr, paras);
+
+    // set erasure coding parameters
+    client.set_ec_parameters(paras);
+
+    // set log level
+    client.set_log_level(paras.loglevel);
+
+    struct timeval start_time, end_time;
+
+    #ifdef IN_MEMORY
+      std::unordered_map<std::string, std::string> key_value;
+      generate_unique_random_strings_difflen(5, stripe_num, value_lengths, key_value);
+    #endif
+
+    // set
+    double set_time = 0;
+    #ifdef IN_MEMORY
+      int i = 0;
+      for (auto& kv : key_value) {
+        gettimeofday(&start_time, NULL);
+        double encoding_time = client.set(kv.second, ms_object_keys[i], ms_object_sizes[i],
+            ms_object_accessrates[i], ms_storge_overhead[i], ms_g[i]);
+        gettimeofday(&end_time, NULL);
+        double temp_time = end_time.tv_sec - start_time.tv_sec +
+            (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+        set_time += temp_time;
+        std::cout << "[SET] set time: " << temp_time << ", encoding time: "
+                  << encoding_time << std::endl;
+        ++i;
+      }
+      std::cout << "Total set time: " << set_time << ", average set time:"
+                << set_time / stripe_num << std::endl;
+    #else
+      for (int i = 0; i < stripe_num; i++) {
+        std::string readpath = path_prefix + "/../../data/Object";
+        double encoding_time = 0;
+        gettimeofday(&start_time, NULL);
+        if (access(readpath.c_str(), 0) == -1) {
+          std::cout << "[Client] file does not exist!" << std::endl;
+          exit(-1);
+        } else {
+          char *buf = new char[value_lengths[i] + 1];
+          std::ifstream ifs(readpath);
+          ifs.read(buf, value_lengths[i]);
+          buf[value_lengths[i]] = '\0';
+          encoding_time = client.set(std::string(buf), ms_object_keys[i], 
+              ms_object_sizes[i], ms_object_accessrates[i], 
+              ms_storge_overhead[i], ms_g[i]);
+          ifs.close();
+          delete buf;
+        }
+        gettimeofday(&end_time, NULL);
+        double temp_time = end_time.tv_sec - start_time.tv_sec +
+            (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+        set_time += temp_time;
+        std::cout << "[SET] set time: " << temp_time << ", encoding time: "
+                  << encoding_time << std::endl;
+      }
+      std::cout << "Total set time: " << set_time << ", average set time:"
+                << set_time / stripe_num << std::endl;
+    #endif
+
+    test_multiple_blocks_repair_lrc_with_testcases(failures_file_path, client, paras, failed_num);
+
+    // delete
+    client.delete_all_stripes();
+  }
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 5) {
@@ -1249,13 +1383,16 @@ int main(int argc, char **argv)
   int stripe_num = std::stoi(argv[3]);
 
   int failed_num = std::stoi(argv[4]);
-  my_assert(0 <= failed_num && failed_num <= 2);
+  my_assert(0 <= failed_num && failed_num <= 4);
   int startcase = 0;
   bool from_file = false;
   if (argc == 7) {
     startcase = std::stoi(argv[5]);
     from_file = std::string(argv[6]) == "true";
   }
+
+  test_multi_blocks_repair_performance(path_prefix, tracefile, stripe_num, paras, failed_num, startcase);
+  return 0;
   
   ParametersInfo paras2 = paras;
   ScaleParameters scale_paras2 = scale_paras;

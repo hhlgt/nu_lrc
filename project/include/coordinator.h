@@ -92,7 +92,7 @@ namespace ECProject
     void do_repair(std::vector<unsigned int> failed_ids, int stripe_id,
                    RepairResp& response);
     void simulation_repair(std::vector<MainRepairPlan>& main_repair,
-                           int& cross_cluster_transfers, int& io_cnt);
+                           int& cross_cluster_transfers, int& io_cnt, int stripe_id);
 
     // merge.cpp
     void do_stripe_merging(MergeResp& response, int step_size);

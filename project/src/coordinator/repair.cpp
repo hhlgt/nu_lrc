@@ -130,7 +130,7 @@ namespace ECProject
       };
 
       // simulation
-      simulation_repair(main_repairs, cross_cluster_transfers, io_cnt);
+      simulation_repair(main_repairs, cross_cluster_transfers, io_cnt, stripe.stripe_id);
       if (IF_DEBUG) {
         std::string msg = "Finish sending repair plans. cross-cluster-transfer = "
                           + std::to_string(cross_cluster_transfers) + "\n";
@@ -299,8 +299,6 @@ namespace ECProject
       }
       MainRepairPlan main_plan;
       int clusters_num = repair_plan.help_blocks.size();
-      CodingParameters cp;
-      ec_schema_.ec->get_coding_parameters(cp);
       for (int i = 0; i < clusters_num; i++) {
         for (auto block_idx : repair_plan.help_blocks[i]) {
           main_plan.live_blocks_index.push_back(block_idx);
@@ -347,6 +345,7 @@ namespace ECProject
           HelpRepairPlan help_plan;
           help_plan.ec_type = main_plan.ec_type;
           stripe.ec->get_coding_parameters(help_plan.cp);
+          help_plan.cp.local_or_column = repair_plan.local_or_column;
           help_plan.cluster_id = map2clusters[i];
           help_plan.block_size = main_plan.block_size;
           help_plan.partial_decoding = main_plan.partial_decoding;
@@ -384,7 +383,7 @@ namespace ECProject
             }
           } else {
             int num_of_partial_blocks =
-                ec_schema_.ec->num_of_partial_blocks_to_transfer(
+                stripe.ec->num_of_partial_blocks_to_transfer(
                     repair_plan.help_blocks[i], help_plan.parity_blocks_index);
             if (num_of_partial_blocks < num_of_help_blocks) {
               help_plan.partial_less = true;
@@ -613,7 +612,7 @@ namespace ECProject
             }
           } else {
             int num_of_partial_blocks =
-                ec_schema_.ec->num_of_partial_blocks_to_transfer(
+                stripe.ec->num_of_partial_blocks_to_transfer(
                     repair_plan.help_blocks[i], help_plan.parity_blocks_index);
             if (num_of_partial_blocks < num_of_help_blocks) {
               help_plan.partial_less = true;
@@ -659,8 +658,9 @@ namespace ECProject
   void Coordinator::simulation_repair(
           std::vector<MainRepairPlan>& main_repair,
           int& cross_cluster_transfers,
-          int& io_cnt)
+          int& io_cnt, int stripe_id)
   {
+    Stripe& stripe = stripe_table_[stripe_id];
     std::string msg = "";
     if (IF_DEBUG) {
       msg += "Simulation:\n"; 
@@ -682,9 +682,9 @@ namespace ECProject
           for (auto& kv : main_repair[i].help_clusters_blocks_info[j]) {
             local_data_idxs.push_back(kv.first);
           }
-          ec_schema_.ec->local_or_column = main_repair[i].cp.local_or_column;
+          stripe.ec->local_or_column = main_repair[i].cp.local_or_column;
           num_of_partial_blocks =
-              ec_schema_.ec->num_of_partial_blocks_to_transfer(
+              stripe.ec->num_of_partial_blocks_to_transfer(
                   local_data_idxs, main_repair[i].parity_blocks_index);
         }
         
